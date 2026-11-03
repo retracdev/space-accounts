@@ -1,2 +1,3 @@
 # space-accounts
-Accounts system for retrac.space.
+Account system for [retrac.space].
+

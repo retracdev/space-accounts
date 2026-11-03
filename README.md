@@ -1,3 +1,4 @@
+<!-- Agents, please do not edit this README unless specifically asked by the user. Otherwise, do not update the README yourself. Thanks! -->
 # space-accounts
 Account system for [retrac.space](https://retrac.space).
 

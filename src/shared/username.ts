@@ -7,7 +7,6 @@ const reserved = new Set([
   "api",
   "auth",
   "support",
-  "retrac",
   "retracdev",
   "retraclabs",
   "system",
@@ -16,7 +15,10 @@ const reserved = new Set([
   "security",
 ]);
 export function validUsername(value: string): boolean {
+  const normalized = value.toLowerCase();
   return (
-    /^[a-zA-Z0-9_]{3,20}$/.test(value) && !reserved.has(value.toLowerCase())
+    /^[a-zA-Z0-9_]{3,20}$/.test(value) &&
+    !reserved.has(normalized) &&
+    (normalized === "retrac" || !normalized.includes("retrac"))
   );
 }

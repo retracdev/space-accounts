@@ -1,5 +1,7 @@
 import { createAuth, authOrigin, type Env } from "./auth";
 
+const websiteOrigin = "https://retrac.space";
+
 const headers = {
   "Content-Security-Policy":
     "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
@@ -13,6 +15,9 @@ export default {
     try {
       const url = new URL(request.url);
       const origin = authOrigin(env);
+      const websiteSession =
+        url.pathname === "/api/auth/get-session" &&
+        request.headers.get("origin") === websiteOrigin;
       if (url.origin !== origin)
         return new Response("Not found", {
           status: 404,
@@ -31,7 +36,21 @@ export default {
           "/verify-email",
           "/delete-user/callback",
         ];
-        if (
+        if (websiteSession && request.method === "OPTIONS") {
+          const requestedHeaders =
+            request.headers
+              .get("access-control-request-headers")
+              ?.toLowerCase()
+              .split(",")
+              .map((header) => header.trim()) ?? [];
+          response = new Response(null, {
+            status:
+              request.headers.get("access-control-request-method") === "GET" &&
+              requestedHeaders.every((header) => header === "content-type")
+                ? 204
+                : 403,
+          });
+        } else if (
           disabled.some(
             (path) =>
               url.pathname === "/api/auth" + path ||
@@ -50,7 +69,31 @@ export default {
           );
         } else response = await createAuth(env).handler(request);
       } else response = await env.ASSETS.fetch(request);
+      // Expose only the greeting to the main site; keep the accounts API intact.
+      if (websiteSession && request.method === "GET" && response.ok) {
+        const session = (await response.json()) as {
+          user: { username?: string };
+        } | null;
+        response = Response.json(
+          session ? { user: { username: session.user.username ?? null } } : null,
+          response,
+        );
+      }
       response = new Response(response.body, response);
+      if (url.pathname === "/api/auth/get-session")
+        response.headers.append("Vary", "Origin");
+      if (
+        websiteSession &&
+        (request.method === "GET" ||
+          (request.method === "OPTIONS" && response.status === 204))
+      ) {
+        response.headers.set("Access-Control-Allow-Origin", websiteOrigin);
+        response.headers.set("Access-Control-Allow-Credentials", "true");
+        if (request.method === "OPTIONS") {
+          response.headers.set("Access-Control-Allow-Methods", "GET");
+          response.headers.set("Access-Control-Allow-Headers", "Content-Type");
+        }
+      }
       for (const [key, value] of Object.entries(headers))
         response.headers.set(key, value);
       if (url.protocol === "https:")

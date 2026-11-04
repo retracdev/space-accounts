@@ -8,7 +8,7 @@
     {
       "binding": "DB",
       "database_name": "space-accounts",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "07fdcf88-924c-44d5-8b1e-50a14859a93e",
       "migrations_dir": "migrations",
     },
   ],

@@ -1,5 +1,10 @@
 # One identity for future games
 
+The historical server-auth proposal below is superseded by the implemented
+[game authentication bridge](game-authentication.md), which documents the official
+Better Auth JWT flow, live-session checks, directory endpoints and configuration.
+Guest-first behavior and host-only cookies remain in effect.
+
 Accounts owns identity, credentials, provider tokens, and sessions. Game databases and a future `space-api` own their own domain data, keyed by the immutable Better Auth `user.id`. A username can change; it is not a primary key. No game or shared API is implemented here.
 
 The first integration keeps the **host-only** cookie on `accounts.retrac.space`. Only when a player chooses an account-only feature may a game offer a nonintrusive link to `https://accounts.retrac.space/sign-in`; afterward they navigate back. Never redirect on game entry. There is no arbitrary return-URL relay. New Google identities choose a username on the account site; a nullable username represents incomplete onboarding.

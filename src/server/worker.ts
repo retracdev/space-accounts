@@ -1,4 +1,5 @@
 import { createAuth, authOrigin, type Env } from "./auth";
+import { gameOrigins, internalGames } from "./games";
 
 const websiteOrigin = "https://retrac.space";
 
@@ -23,7 +24,23 @@ export default {
           status: 404,
           headers: { ...headers, "Cache-Control": "no-store" },
         });
-      if (url.pathname === "/api/config") {
+      if (url.pathname.startsWith("/api/internal/games/")) {
+        response = await internalGames(request, env);
+      } else if (url.pathname === "/api/auth/token") {
+        const caller = request.headers.get("origin");
+        if ((caller && caller !== origin && !gameOrigins(env).includes(caller)) ||
+            request.headers.get("sec-fetch-site") === "cross-site") {
+          response = new Response(null, { status: 403 });
+        } else if (request.method === "OPTIONS") {
+          const requested = (request.headers.get("access-control-request-headers") ?? "")
+            .toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
+          response = new Response(null, { status: caller && gameOrigins(env).includes(caller) &&
+            request.headers.get("access-control-request-method") === "GET" &&
+            requested.every((h) => h === "content-type") ? 204 : 403 });
+        } else if (request.method !== "GET") {
+          response = new Response(null, { status: 405 });
+        } else response = await createAuth(env).handler(request);
+      } else if (url.pathname === "/api/config") {
         response = Response.json({
           google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
         });
@@ -100,13 +117,32 @@ export default {
         response.headers.set("Strict-Transport-Security", "max-age=31536000");
       if (url.pathname.startsWith("/api/"))
         response.headers.set("Cache-Control", "no-store");
+      tokenCors(request, env, response);
       return response;
     } catch {
       // Never return provider errors, request bodies, tokens, or stack traces.
-      return Response.json(
+      const failed = Response.json(
         { message: "Something went wrong. Please try again." },
         { status: 503, headers: { ...headers, "Cache-Control": "no-store" } },
       );
+      tokenCors(request, env, failed);
+      return failed;
     }
   },
 };
+
+function tokenCors(request: Request, env: Env, response: Response) {
+  if (new URL(request.url).pathname !== "/api/auth/token") return;
+  response.headers.append("Vary", "Origin");
+  const caller = request.headers.get("origin");
+  try {
+    if (new URL(request.url).origin !== authOrigin(env) || !caller || !gameOrigins(env).includes(caller)) return;
+    if (request.method === "OPTIONS" && response.status !== 204) return;
+    response.headers.set("Access-Control-Allow-Origin", caller);
+    response.headers.set("Access-Control-Allow-Credentials", "true");
+    if (request.method === "OPTIONS") {
+      response.headers.set("Access-Control-Allow-Methods", "GET");
+      response.headers.set("Access-Control-Allow-Headers", "Content-Type");
+    }
+  } catch { /* Invalid configuration must fail closed. */ }
+}

@@ -8,6 +8,13 @@
       "when": 1793751846781,
       "tag": "0000_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793760400996,
+      "tag": "0001_game_jwks",
+      "breakpoints": true
     }
   ]
 }

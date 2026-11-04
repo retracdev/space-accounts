@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { username } from "better-auth/plugins";
+import { username, jwt } from "better-auth/plugins";
 import {
   createAuthMiddleware,
   APIError,
@@ -9,6 +9,8 @@ import {
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 import { validUsername } from "../shared/username";
+import { symmetricEncrypt } from "better-auth/crypto";
+import { importJWK } from "jose";
 
 export interface Env {
   DB: D1Database;
@@ -17,6 +19,9 @@ export interface Env {
   BETTER_AUTH_SECRET: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  ACCOUNTS_API_KEY?: string;
+  GAME_AUTH_ORIGINS?: string;
+  GAME_JWT_PRIVATE_KEY?: string;
 }
 export function authOrigin(env: Env): string {
   const url = new URL(env.BETTER_AUTH_URL);
@@ -152,6 +157,37 @@ export function createAuth(env: Env) {
       }),
     },
     plugins: [
+      jwt({
+        disableSettingJwtHeader: true,
+        jwks: { keyPairConfig: { alg: "ES256" } },
+        adapter: {
+          // Provision from a Cloudflare secret; keep the plugin's encrypted D1 key storage.
+          createJwk: async (data, ctx) => {
+            const key = JSON.parse(env.GAME_JWT_PRIVATE_KEY ?? "null");
+            if (!key || key.kty !== "EC" || key.crv !== "P-256" ||
+                typeof key.d !== "string" || typeof key.x !== "string" || typeof key.y !== "string")
+              throw new Error("Configure an ES256 signing key secret");
+            const privateJwk = { kty: "EC", crv: "P-256", x: key.x, y: key.y, d: key.d };
+            await importJWK(privateJwk, "ES256");
+            return ctx.context.adapter.create({
+              model: "jwks",
+              data: {
+                ...data,
+                publicKey: JSON.stringify({ kty: "EC", crv: "P-256", x: key.x, y: key.y }),
+                privateKey: JSON.stringify(await symmetricEncrypt({
+                  key: ctx.context.secretConfig, data: JSON.stringify(privateJwk),
+                })),
+              },
+            });
+          },
+        },
+        jwt: {
+          issuer: "https://accounts.retrac.space",
+          audience: "https://api.retrac.space",
+          expirationTime: "5m",
+          definePayload: ({ session }) => ({ sid: session.id }),
+        },
+      }),
       username({
         minUsernameLength: 3,
         maxUsernameLength: 20,

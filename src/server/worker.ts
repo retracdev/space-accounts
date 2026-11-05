@@ -23,10 +23,12 @@ export default {
     try {
       const url = new URL(request.url);
       const origin = authOrigin(env);
+      const requestOrigin = request.headers.get("origin");
 
       const websiteSession =
         url.pathname === "/api/auth/get-session" &&
-        request.headers.get("origin") === websiteOrigin;
+        requestOrigin !== null &&
+        websiteOrigins.includes(requestOrigin);
 
       if (url.origin !== origin)
         return new Response("Not found", {
@@ -124,7 +126,7 @@ export default {
         response = await env.ASSETS.fetch(request);
       }
 
-      // Expose only the greeting to the main site.
+      // Expose only the username to approved websites.
       if (
         websiteSession &&
         request.method === "GET" &&
@@ -156,7 +158,7 @@ export default {
       ) {
         response.headers.set(
           "Access-Control-Allow-Origin",
-          websiteOrigin,
+          requestOrigin!,
         );
         response.headers.set(
           "Access-Control-Allow-Credentials",

@@ -17,6 +17,8 @@
   </head>
   <body>
     <a class="skip" href="#content">Skip to content</a>
+    <canvas id="bgcanvas" aria-hidden="true"></canvas>
+    <div class="background-veil" aria-hidden="true"></div>
     <header>
       <a
         class="brand"
@@ -32,6 +34,18 @@
         account</span
       >
     </header>
+    <div class="hero">
+      <p class="title">
+        <span class="sr-only">accounts</span>
+        <canvas id="title" aria-hidden="true"></canvas>
+      </p>
+    </div>
+    <nav
+      class="mode-cards"
+      id="mode-cards"
+      aria-label="Sign in or create an account"
+      hidden
+    ></nav>
     <main id="content" tabindex="-1">
       <p role="status">Loading your account…</p>
     </main>

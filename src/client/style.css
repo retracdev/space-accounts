@@ -43,7 +43,7 @@ footer {
   padding: 28px 32px;
 }
 header {
-  margin-top: 0;
+  margin: 0 auto;
 }
 .brand {
   display: block;
@@ -68,12 +68,12 @@ header {
 }
 main {
   width: min(100%, 1040px);
-  margin: auto;
-  padding: 64px 32px 88px;
+  margin: 0 auto;
+  padding: 56px 32px 88px;
   outline: none;
 }
 footer {
-  margin-bottom: 0;
+  margin: auto auto 0;
   border-top: 1px solid var(--line);
   font-size: 12px;
   color: var(--muted);
@@ -135,29 +135,14 @@ h2 {
   padding: 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #0e0c15;
+  background: rgba(14, 12, 21, 0.86);
+  backdrop-filter: blur(12px);
 }
 .subtle {
   font-size: 14px;
   line-height: 1.65;
   color: var(--muted);
   margin-bottom: 26px;
-}
-.tabs {
-  display: flex;
-  border-bottom: 1px solid var(--line);
-  margin: -4px 0 28px;
-  gap: 24px;
-}
-.tabs a {
-  text-decoration: none;
-  color: var(--muted);
-  padding: 8px 0 14px;
-  font-size: 14px;
-}
-.tabs a[aria-current] {
-  color: var(--accent);
-  border-bottom: 2px solid var(--accent);
 }
 label {
   display: block;
@@ -435,4 +420,154 @@ button:disabled {
   .header-label {
     display: none;
   }
+}
+
+/* ---------- Background (shared with retrac.space) ---------- */
+#bgcanvas,
+.background-veil {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#bgcanvas {
+  display: block;
+  z-index: 0;
+}
+.background-veil {
+  z-index: 1;
+  background:
+    radial-gradient(
+      115% 78% at 50% 0%,
+      transparent 32%,
+      rgba(5, 6, 10, 0.7) 100%
+    ),
+    linear-gradient(rgba(5, 6, 10, 0.78), rgba(5, 6, 10, 0.78));
+}
+header,
+.hero,
+.mode-cards,
+main,
+footer {
+  position: relative;
+  z-index: 2;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Title ---------- */
+.hero {
+  display: flex;
+  justify-content: center;
+  padding: clamp(8px, 4vh, 48px) 24px clamp(32px, 6vh, 64px);
+}
+.title {
+  position: relative;
+  margin: 0;
+  /* font-size drives the canvas text size (read in title.ts) */
+  font-size: clamp(56px, 13vw, 168px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.title canvas {
+  display: block;
+}
+
+/* ---------- Sign in / create account cards ---------- */
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  width: min(100%, 860px);
+  margin: 0 auto;
+  padding: 0 32px;
+}
+.card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  isolation: isolate;
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 0.4s,
+    opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.card:hover {
+  color: inherit;
+}
+.card.shown {
+  opacity: 1;
+  transform: none;
+}
+.card.shown:hover,
+.card.shown.active {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.card[aria-current],
+.card.shown[aria-current]:hover {
+  border-color: var(--accent);
+}
+.card canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: -1;
+}
+.card .info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px 24px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+}
+.card-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@media (max-width: 800px) {
+  .mode-cards {
+    padding: 0 24px;
+    max-width: 488px;
+    gap: 16px;
+  }
+}
+@media (max-width: 560px) {
+  .card {
+    aspect-ratio: 4 / 3;
+  }
+  .card .info {
+    padding: 14px 16px;
+  }
+  .card-title {
+    font-size: 17px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}
+:root[data-reduce-motion="true"] .card {
+  transition: none;
 }

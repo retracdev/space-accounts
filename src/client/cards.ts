@@ -3,23 +3,19 @@
 import { motion } from "./motion";
 import { titleReady } from "./title";
 
-export type Mode = "sign-in" | "sign-up";
-
 const MAX_PIXEL = 16; // how chunky when idle
 const IDLE_SPEED = 0.15; // playback speed when not hovered
 const LEVELS = [10, 6, 4, 2, 1]; // pixel sizes of each ripple ring, outer -> inner
 const RIPPLE_TIME = 0.9; // seconds for the ripple to cover the whole card
 const BAND = 0.16; // ring thickness (fraction of card diagonal)
 
-const options: { mode: Mode; name: string; href: string; video: string }[] = [
+const options: { name: string; href: string; video: string }[] = [
   {
-    mode: "sign-in",
     name: "Sign In",
     href: "/sign-in",
     video: "/videos/login-loop.mp4",
   },
   {
-    mode: "sign-up",
     name: "Create Account",
     href: "/sign-up",
     video: "/videos/signup-loop.mp4",
@@ -27,7 +23,6 @@ const options: { mode: Mode; name: string; href: string; video: string }[] = [
 ];
 
 interface Card {
-  mode: Mode;
   el: HTMLAnchorElement;
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -45,7 +40,7 @@ interface Card {
 }
 
 const container = document.querySelector<HTMLElement>("#mode-cards")!;
-const cards: Card[] = options.map(({ mode, name, href, video: src }) => {
+const cards: Card[] = options.map(({ name, href, video: src }) => {
   const el = document.createElement("a");
   el.className = "card";
   el.href = href;
@@ -56,7 +51,6 @@ const cards: Card[] = options.map(({ mode, name, href, video: src }) => {
   const video = el.querySelector("video")!;
   video.playbackRate = IDLE_SPEED;
   const card: Card = {
-    mode,
     el,
     canvas,
     ctx: canvas.getContext("2d")!,
@@ -83,24 +77,9 @@ const cards: Card[] = options.map(({ mode, name, href, video: src }) => {
     if (event.pointerType === "mouse") card.hover = false;
   });
   el.addEventListener("click", (event) => {
-    // Touch: the tapped card ripples sharp from the tap point.
-    if (matchMedia("(hover: none)").matches) {
-      for (const other of cards) {
-        if (other === card) continue;
-        other.hover = false;
-        other.el.classList.remove("active");
-      }
-      if (!card.hover && card.r < 0.05) setOrigin(event);
-      card.hover = true;
-      el.classList.add("active");
-    }
-    // Re-selecting the current option would only reset the form.
     const plain =
       !event.ctrlKey && !event.metaKey && !event.shiftKey && event.button === 0;
-    if (plain && el.hasAttribute("aria-current")) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
+    if (plain) void hideModeCards(el);
   });
   return card;
 });
@@ -120,15 +99,57 @@ function resize() {
   }
 }
 
-export function showModeCards(mode: Mode | null) {
-  container.hidden = !mode;
+let titleDone = false;
+let leaving: Promise<void> | null = null;
+
+function reveal() {
+  cards.forEach((card, i) =>
+    setTimeout(
+      () => card.el.classList.add("shown"),
+      motion.matches ? 0 : i * 140,
+    ),
+  );
+}
+
+export function showModeCards() {
+  if (!container.hidden && !leaving) return;
+  leaving = null;
+  container.hidden = false;
+  container.classList.remove("leaving");
   for (const card of cards) {
-    if (card.mode === mode) card.el.setAttribute("aria-current", "page");
-    else card.el.removeAttribute("aria-current");
-    if (mode) playVideo(card.video);
-    else card.video.pause();
+    card.el.classList.remove("picked", "shown");
+    card.hover = false;
+    card.r = 0;
+    card.speed = IDLE_SPEED;
+    playVideo(card.video);
   }
-  if (mode) resize();
+  resize();
+  if (titleDone) {
+    void container.offsetWidth; // commit the hidden state so the slide-in replays
+    reveal();
+  }
+}
+
+// The picked card lifts away while the other drops, then the row is removed.
+export function hideModeCards(picked?: HTMLElement) {
+  if (container.hidden) return Promise.resolve();
+  if (!leaving) {
+    picked?.classList.add("picked");
+    container.classList.add("leaving");
+    leaving = new Promise<void>((done) =>
+      setTimeout(done, motion.matches ? 0 : 420),
+    ).then(() => {
+      if (!container.classList.contains("leaving")) return; // shown again meanwhile
+      leaving = null;
+      container.hidden = true;
+      container.classList.remove("leaving");
+      for (const card of cards) {
+        card.el.classList.remove("picked");
+        card.video.pause();
+      }
+    });
+  }
+  return leaving;
 }
 
 // Center-crop like object-fit: cover before the pixel/ripple pass.
@@ -243,11 +264,7 @@ addEventListener("resize", () => {
   if (!container.hidden) resize();
 });
 requestAnimationFrame(frame);
-void titleReady.then(() =>
-  cards.forEach((card, i) =>
-    setTimeout(
-      () => card.el.classList.add("shown"),
-      motion.matches ? 0 : i * 140,
-    ),
-  ),
-);
+void titleReady.then(() => {
+  titleDone = true;
+  if (!container.hidden) reveal();
+});

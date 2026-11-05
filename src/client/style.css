@@ -125,12 +125,6 @@ h2 {
   max-width: 300px;
   font-size: 16px;
 }
-.intro small {
-  display: block;
-  margin-top: 64px;
-  color: var(--muted);
-  font-size: 12px;
-}
 .panel {
   padding: 32px;
   border: 1px solid var(--line);
@@ -402,9 +396,6 @@ button:disabled {
     font-size: 38px;
     margin-bottom: 12px;
   }
-  .intro small {
-    display: none;
-  }
   .intro p:not(.eyebrow) {
     max-width: none;
     margin-bottom: 8px;
@@ -568,10 +559,6 @@ footer {
   transform: translateY(-4px);
   border-color: rgba(255, 255, 255, 0.3);
 }
-.card[aria-current],
-.card.shown[aria-current]:hover {
-  border-color: var(--accent);
-}
 .card canvas {
   position: absolute;
   inset: 0;
@@ -618,4 +605,56 @@ footer {
 }
 :root[data-reduce-motion="true"] .card {
   transition: none;
+}
+
+/* ---------- Chooser -> form transitions ---------- */
+.mode-cards.leaving .card {
+  opacity: 0;
+  transform: translateY(24px);
+  pointer-events: none;
+  transition:
+    transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.34s ease-in;
+}
+.mode-cards.leaving .card.picked {
+  transform: translateY(-14px) scale(1.04);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+}
+@keyframes sink {
+  to {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+.auth-layout > * {
+  animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.auth-layout > .panel {
+  animation-delay: 0.08s;
+}
+.auth-layout.leaving > * {
+  animation: sink 0.28s ease-in both;
+}
+.back {
+  margin: -12px 0 14px -4px;
+  min-height: 32px;
+  font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mode-cards.leaving .card,
+  .auth-layout > * {
+    transition: none;
+    animation: none;
+  }
+}
+:root[data-reduce-motion="true"] .mode-cards.leaving .card,
+:root[data-reduce-motion="true"] .auth-layout > * {
+  transition: none;
+  animation: none;
 }

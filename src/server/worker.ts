@@ -5,6 +5,7 @@ import { gameOrigins, internalGames } from "./games";
 const websiteOrigins = [
   "https://retrac.space",
   "https://basketbros.retrac.space",
+  "https://basketsmash.retrac.space",
   "https://retracdev.github.io",
 ];
 

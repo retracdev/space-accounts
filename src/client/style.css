@@ -285,21 +285,58 @@ button:disabled {
   margin: 20px 0 0;
 }
 .settings {
-  max-width: 720px;
+  max-width: 976px;
   margin: auto;
 }
-.settings h1 {
-  font-size: 40px;
-}
-.settings-head {
+.profile {
   display: flex;
-  align-items: start;
-  justify-content: space-between;
+  align-items: center;
   gap: 24px;
-  margin-bottom: 32px;
-}
-.settings .panel {
   margin-bottom: 20px;
+}
+.avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #8d7bd1);
+  color: #171020;
+  font-size: 30px;
+  font-weight: 700;
+}
+.profile-text {
+  flex: 1;
+  min-width: 0;
+}
+.profile .eyebrow {
+  margin-bottom: 8px;
+}
+.profile h1 {
+  font-size: 36px;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.profile .subtle {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+.card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.danger .card-label {
+  color: #edb4be;
 }
 .settings .panel h2 {
   font-size: 19px;
@@ -390,9 +427,20 @@ button:disabled {
   .panel {
     padding: 24px;
   }
-  .settings-head {
-    flex-direction: column;
-    gap: 12px;
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+  .profile {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+  }
+  .profile h1 {
+    font-size: 28px;
   }
   footer span {
     display: none;

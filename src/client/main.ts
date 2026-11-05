@@ -1,6 +1,8 @@
 import { createAuthClient } from "better-auth/client";
 import { usernameClient } from "better-auth/client/plugins";
 import { validUsername, USERNAME_HELP } from "../shared/username";
+import { showModeCards } from "./cards";
+import "./background";
 import "./style.css";
 
 const auth = createAuthClient({ plugins: [usernameClient()] });
@@ -121,7 +123,7 @@ function usernameAvailability() {
   });
 }
 function authLayout(signup: boolean) {
-  root.innerHTML = `<div class="auth-layout"><section class="intro"><p class="eyebrow">retrac.space accounts</p><h1>Your next move<br>starts here.</h1><p>A familiar name. A single account.<br>All your retrac.space games.</p><small>Make yourself at home.</small></section><section class="panel" aria-label="${signup ? "Create account" : "Sign in"}"><nav class="tabs"><a href="/sign-in" data-nav ${!signup ? 'aria-current="page"' : ""}>Sign in</a><a href="/sign-up" data-nav ${signup ? 'aria-current="page"' : ""}>Create account</a></nav><h2>${signup ? "Find your space." : "Welcome back."}</h2><p class="subtle">${signup ? "Choose the name you’ll play with." : "Pick up where you left off."}</p><form id="auth-form">${signup ? field("username", "Username", "text", "", "username", USERNAME_HELP) : field("identifier", "Username or email", "text", "", "username")}${signup ? field("email", "Email", "email", "", "email") : ""}${!signup ? '<div class="split"><label for="password">Password</label></div>' : ""}${field("password", signup ? "Password" : "Password", "password", "", signup ? "new-password" : "current-password", signup ? "At least 12 characters." : "")}<button class="wide" type="submit">${signup ? "Create account" : "Sign in"}</button></form>${googleEnabled ? '<div class="divider">or</div><button id="google" class="secondary wide">Continue with Google</button>' : ""}${notice}<p class="fine">${signup ? "Keep your password safe. Password recovery is not available." : "Your account works across retrac.space."}</p></section></div>`;
+  root.innerHTML = `<div class="auth-layout"><section class="intro"><p class="eyebrow">retrac.space accounts</p><h1>Your next move<br>starts here.</h1><p>A familiar name. A single account.<br>All your retrac.space games.</p><small>Make yourself at home.</small></section><section class="panel" aria-label="${signup ? "Create account" : "Sign in"}"><h2>${signup ? "Find your space." : "Welcome back."}</h2><p class="subtle">${signup ? "Choose the name you’ll play with." : "Pick up where you left off."}</p><form id="auth-form">${signup ? field("username", "Username", "text", "", "username", USERNAME_HELP) : field("identifier", "Username or email", "text", "", "username")}${signup ? field("email", "Email", "email", "", "email") : ""}${!signup ? '<div class="split"><label for="password">Password</label></div>' : ""}${field("password", signup ? "Password" : "Password", "password", "", signup ? "new-password" : "current-password", signup ? "At least 12 characters." : "")}<button class="wide" type="submit">${signup ? "Create account" : "Sign in"}</button></form>${googleEnabled ? '<div class="divider">or</div><button id="google" class="secondary wide">Continue with Google</button>' : ""}${notice}<p class="fine">${signup ? "Keep your password safe. Password recovery is not available." : "Your account works across retrac.space."}</p></section></div>`;
   if (!signup)
     document
       .querySelector(".field:has(#password) label")
@@ -187,6 +189,7 @@ async function render() {
   }
   currentUser = session.data?.user;
   const path = location.pathname;
+  showModeCards(currentUser ? null : path === "/sign-up" ? "sign-up" : "sign-in");
   if (currentUser) {
     if (!currentUser.username) renderUsername();
     else renderSettings(currentUser);

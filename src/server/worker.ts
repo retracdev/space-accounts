@@ -2,7 +2,11 @@
 import { createAuth, authOrigin, type Env } from "./auth";
 import { gameOrigins, internalGames } from "./games";
 
-const websiteOrigin = "https://retrac.space";
+const websiteOrigins = [
+  "https://retrac.space",
+  "https://basketbros.retrac.space",
+  "https://retracdev.github.io",
+];
 
 const headers = {
   "Content-Security-Policy":

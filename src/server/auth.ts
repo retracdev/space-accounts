@@ -74,6 +74,17 @@ export function createAuth(env: Env) {
         : {},
     account: { accountLinking: { enabled: false }, encryptOAuthTokens: true },
     user: {
+      // input: false keeps these operator-only; clients can read but never set them.
+      additionalFields: {
+        actionRequired: {
+          type: "boolean",
+          required: false,
+          defaultValue: false,
+          input: false,
+        },
+        actionRequiredReason: { type: "string", required: false, input: false },
+        actionRequiredUrl: { type: "string", required: false, input: false },
+      },
       changeEmail: { enabled: true, updateEmailWithoutVerification: true },
       deleteUser: { enabled: true },
     },

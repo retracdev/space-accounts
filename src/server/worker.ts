@@ -128,19 +128,34 @@ export default {
         response = await env.ASSETS.fetch(request);
       }
 
-      // Expose only the username to approved websites.
+      // Expose only the username and any required account action to approved websites.
       if (
         websiteSession &&
         request.method === "GET" &&
         response.ok
       ) {
         const session = (await response.json()) as {
-          user: { username?: string };
+          user: {
+            username?: string;
+            actionRequired?: boolean | null;
+            actionRequiredReason?: string | null;
+            actionRequiredUrl?: string | null;
+          };
         } | null;
 
         response = Response.json(
           session
-            ? { user: { username: session.user.username ?? null } }
+            ? {
+                user: { username: session.user.username ?? null },
+                actionRequired: session.user.actionRequired
+                  ? {
+                      required: true,
+                      reason: session.user.actionRequiredReason ?? null,
+                      // Send the visitor to the account site unless a specific page is set.
+                      url: session.user.actionRequiredUrl ?? origin,
+                    }
+                  : { required: false, reason: null, url: null },
+              }
             : null,
           response,
         );

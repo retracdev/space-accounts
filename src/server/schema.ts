@@ -19,6 +19,12 @@ export const user = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
     username: text("username").unique(),
     displayUsername: text("display_username"),
+    // Set by operators only; surfaced to approved websites through get-session.
+    actionRequired: integer("action_required", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    actionRequiredReason: text("action_required_reason"),
+    actionRequiredUrl: text("action_required_url"),
   },
   (t) => [uniqueIndex("user_username_lower_idx").on(sql`lower(${t.username})`)],
 );

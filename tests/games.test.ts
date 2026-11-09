@@ -64,7 +64,10 @@ it("issues minimal five-minute tokens only for real sessions, with narrowly scop
   expect(guest.status).toBe(401);
   const greeting = await auth("get-session", undefined, "https://retrac.space");
   expect(greeting.headers.get("set-auth-jwt")).toBeNull();
-  expect(await greeting.json()).toEqual({ user: { username: "game_player" } });
+  expect(await greeting.json()).toEqual({
+    user: { username: "game_player" },
+    actionRequired: { required: false, reason: null, url: null },
+  });
 });
 
 it("requires service authorization, rejects browser origins, and bounds directory queries", async () => {

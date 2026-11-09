@@ -61,6 +61,25 @@ Anonymous token requests return 401; normal anonymous get-session behavior remai
 200/null. No automatic JWT response header is added to get-session, including the
 existing restricted `https://retrac.space` greeting.
 
+For approved website origins, a signed-in get-session returns only:
+
+```json
+{
+  "user": { "username": "retrac" },
+  "actionRequired": { "required": true, "reason": "account_review", "url": "https://accounts.retrac.space" }
+}
+```
+
+`actionRequired` mirrors the operator-only `user` columns `action_required`,
+`action_required_reason`, and `action_required_url`. When no action is required it is
+`{ "required": false, "reason": null, "url": null }`; when one is required and no URL
+is stored, `url` falls back to the account origin. Clients cannot set these fields.
+Flag an account with, for example:
+
+```sql
+UPDATE user SET action_required = 1, action_required_reason = 'account_review' WHERE username = 'retrac';
+```
+
 Both internal routes require POST, JSON, **no Origin header**, and
 `X-Space-Api-Key`. They return no cookies or CORS headers and are no-store:
 

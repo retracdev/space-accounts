@@ -77,6 +77,31 @@ export function createAuth(env: Env) {
       changeEmail: { enabled: true, updateEmailWithoutVerification: true },
       deleteUser: { enabled: true },
     },
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            if (user.username) return;
+
+            for (let attempt = 0; attempt < 100; attempt++) {
+              const username = `user${10000 + Math.floor(Math.random() * 90000)}`;
+              // Include manually assigned names; the unique index also guards concurrent signups.
+              const existing = await env.DB.prepare(
+                'SELECT id FROM "user" WHERE lower(username) = ? LIMIT 1',
+              )
+                .bind(username)
+                .first();
+              if (!existing)
+                return { data: { ...user, username, displayUsername: username } };
+            }
+
+            throw new APIError("SERVICE_UNAVAILABLE", {
+              message: "Unable to assign a username. Please try again.",
+            });
+          },
+        },
+      },
+    },
     session: {
       expiresIn: 60 * 60 * 24 * 7,
       updateAge: 60 * 60 * 24,

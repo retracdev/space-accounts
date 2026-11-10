@@ -8,6 +8,12 @@ Use [Cloudflare Pages advanced mode](https://developers.cloudflare.com/pages/fun
 
 [Pages custom subdomains](https://developers.cloudflare.com/pages/configuration/custom-domains/) support externally managed DNS. Associate `accounts.retrac.space` with Pages first, then add its CNAME in Vercel. Ordinary [Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) expect a Cloudflare zone. A CNAME to workers.dev is not equivalent and cannot establish retrac.space cookies. Keep nameservers, apex records, the existing GitHub Pages site, registration, and DNS management at Vercel.
 
+## Git-connected Pages builds
+
+For the existing GitHub-connected project, use the repository root as the build root, `npm run build` as the build command, and `dist` as the output directory. These dashboard build settings are separate from `wrangler.jsonc`; its `pages_build_output_dir` selects the output directory but does not run the build.
+
+Vite empties the output directory on every production build and bundles `src/server/worker.ts` into `_worker.js` after writing the frontend. Both `npm run build` and a direct `vite build` therefore generate the current frontend and Worker together. A Worker bundling error fails the build. Do not skip the production build or publish a previously generated `dist` directory.
+
 ## Setup after approval
 
 1. Install Node 24, run `npm ci`, authenticate using `npx wrangler login`, and confirm the personal Cloudflare account.

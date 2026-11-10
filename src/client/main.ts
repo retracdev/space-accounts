@@ -13,6 +13,11 @@ type User = NonNullable<
 >["user"];
 let currentUser: User | undefined;
 let googleEnabled = false;
+const requiredUsernamePath = "/change-username-required-1";
+type AccountAction = {
+  actionRequired?: boolean;
+  actionRequiredReason?: string | null;
+};
 const escape = (value: string) =>
   value.replace(
     /[&<>"']/g,
@@ -136,6 +141,7 @@ function authLayout(signup: boolean) {
     document
       .querySelector(".field:has(#password) label")
       ?.setAttribute("hidden", "");
+  const destination = location.pathname === requiredUsernamePath ? requiredUsernamePath : "/settings";
   bindForm("auth-form", async (data) => {
     const username = String(data.get(signup ? "username" : "identifier")),
       password = String(data.get("password"));
@@ -148,14 +154,14 @@ function authLayout(signup: boolean) {
           password,
         }),
       );
-      navigate("/settings");
+      navigate(destination);
     } else {
       check(
         username.includes("@")
           ? await auth.signIn.email({ email: username, password })
           : await auth.signIn.username({ username, password }),
       );
-      navigate("/settings");
+      navigate(destination);
     }
   });
   document
@@ -167,7 +173,7 @@ function authLayout(signup: boolean) {
         check(
           await auth.signIn.social({
             provider: "google",
-            callbackURL: "/settings",
+            callbackURL: destination,
             errorCallbackURL: "/sign-in?error=oauth",
           }),
         );
@@ -198,11 +204,14 @@ async function render() {
   currentUser = session.data?.user;
   const path = location.pathname;
   const form = path === "/sign-in" || path === "/sign-up";
-  if (currentUser || form) await hideModeCards();
+  if (currentUser || form || path === requiredUsernamePath) await hideModeCards();
   else showModeCards();
   if (currentUser) {
-    if (!currentUser.username) renderUsername();
+    if (path === requiredUsernamePath) renderRequiredUsername(currentUser);
+    else if (!currentUser.username) renderUsername();
     else renderSettings(currentUser);
+  } else if (path === requiredUsernamePath) {
+    authLayout(false);
   } else if (!form) {
     root.innerHTML = "";
   } else {
@@ -236,6 +245,44 @@ function renderUsername() {
   usernameAvailability();
   bindSignout();
 }
+function renderRequiredUsername(user: User) {
+  const action = user as User & AccountAction;
+  document.title = "Change username ? retrac.space";
+  if (action.actionRequiredReason !== "inappropriate_username") {
+    root.innerHTML = `<section class="single panel"><h1>No username change required</h1><p class="subtle">There is no inappropriate username issue to resolve on this account.</p><a class="button wide" href="/settings" data-nav>Account settings</a></section>`;
+    return;
+  }
+  root.innerHTML = `<section class="single panel"><h1>You need to change your username</h1><p class="subtle">Your previous username was flagged as inappropriate or not allowed. Please choose a new username to resolve this issue.</p><form id="required-username">${field("username", "Username", "text", user.username ?? "", "username", USERNAME_HELP)}<button type="submit" class="wide">Change username</button></form>${notice}<button class="text-button" id="signout">Sign out</button></section>`;
+  usernameAvailability();
+  bindSignout();
+  bindForm("required-username", async (data) => {
+    const username = String(data.get("username"));
+    if (username.toLowerCase() === user.username?.toLowerCase())
+      throw new Error("Please choose a different username.");
+    const response = await fetch("/api/auth/update-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, resolveInappropriateUsername: true }),
+    });
+    const result = await response.json() as { message?: string };
+    if (!response.ok)
+      throw new Error(response.status === 429
+        ? "Too many attempts. Please wait a few minutes."
+        : result.message || "Unable to save your username. Please try again.");
+    const session = await auth.getSession();
+    check(session);
+    currentUser = session.data?.user;
+    const currentAction = currentUser as (User & AccountAction) | undefined;
+    if (!currentUser || currentAction?.actionRequired) {
+      await render();
+      message("Your username was saved. Your account still requires attention.");
+      return;
+    }
+    document.title = "Username updated ? retrac.space";
+    root.innerHTML = `<section class="single panel username-success" role="status"><svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m7.5 12 3 3 6-6"/></svg><h1 tabindex="-1">Username updated successfully</h1><p class="subtle">Your username has been changed, and your account issue has been resolved. You can now return to wherever you were and continue using your account.</p></section>`;
+    root.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
+  });
+}
 function bindSignout() {
   document.querySelector("#signout")?.addEventListener("click", async () => {
     try {
@@ -248,6 +295,14 @@ function bindSignout() {
 }
 function renderSettings(user: User) {
   root.innerHTML = `<div class="settings"><section class="panel profile"><div class="avatar" aria-hidden="true">${escape(user.username!.charAt(0).toUpperCase())}</div><div class="profile-text"><p class="eyebrow">Your account</p><h1>Hey, ${escape(user.username!)}.</h1><p class="subtle">${escape(user.email)}</p></div><button class="secondary" id="signout">Sign out</button></section>${notice}<div class="dashboard"><section class="panel"><p class="card-label">Profile</p><h2>Username</h2><p class="subtle">How you are known across retrac.space.</p><form id="username-form">${field("username", "Username", "text", user.username!, "username", USERNAME_HELP)}<button type="submit">Save username</button></form></section><section class="panel"><p class="card-label">Sign-in</p><h2>Email</h2><p class="subtle">${escape(user.email)}</p><div id="email-area"><p class="help">Loading sign-in methods...</p></div></section><section class="panel"><p class="card-label">Security</p><h2>Password</h2><p class="subtle">Keep it safe. There is no password recovery.</p><div id="password-area"></div></section><section class="panel danger"><p class="card-label">Danger zone</p><h2>Delete account</h2><p class="subtle">Permanently remove your account and its sign-in data.</p><details><summary>Delete my account</summary><p>This cannot be undone. You will lose access to this identity across retrac.space.</p><div id="delete-area"></div></details></section></div></div>`;
+  if ((user as User & AccountAction).actionRequiredReason === "inappropriate_username") {
+    const link = document.createElement("a");
+    link.href = requiredUsernamePath;
+    link.dataset.nav = "";
+    link.className = "button secondary wide";
+    link.textContent = "Resolve account issue";
+    root.querySelector(".profile")?.after(link);
+  }
   bindSignout();
   usernameAvailability();
   bindForm("username-form", async (data) => {

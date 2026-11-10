@@ -9,6 +9,7 @@ import {
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 import { validUsername } from "../shared/username";
+import { containsProfanity, generateUsername, inappropriateUsernameAction, updateUsername } from "./usernames";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { importJWK } from "jose";
 
@@ -39,16 +40,43 @@ export function authOrigin(env: Env): string {
 }
 export function createAuth(env: Env) {
   const origin = authOrigin(env);
+  const generated = new Set<string>();
+  const flagged = new Set<string>();
+  const checked = new Set<string>();
+  const database = drizzleAdapter(drizzle(env.DB, { schema }), {
+    provider: "sqlite",
+    schema,
+    transaction: false,
+  });
   return betterAuth({
     appName: "retrac.space",
     baseURL: origin,
     secret: env.BETTER_AUTH_SECRET,
     logger: { disabled: true },
-    database: drizzleAdapter(drizzle(env.DB, { schema }), {
-      provider: "sqlite",
-      schema,
-      transaction: false,
-    }),
+    database: (options) => {
+      const adapter = database(options);
+      const create: typeof adapter.create = async (input) => {
+        if (input.model !== "user" || !generated.has(String(input.data.username)))
+          return adapter.create(input);
+        let data = input.data;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          try {
+            return await adapter.create({ ...input, data });
+          } catch (error) {
+            const collision = await env.DB.prepare(
+              'SELECT id FROM "user" WHERE lower(username) = ? LIMIT 1',
+            ).bind(String(data.username).toLowerCase()).first();
+            if (!collision) throw error;
+            const username = await generateUsername(env.DB);
+            data = { ...data, username, displayUsername: username };
+          }
+        }
+        throw new APIError("SERVICE_UNAVAILABLE", {
+          message: "Unable to assign a username. Please try again.",
+        });
+      };
+      return { ...adapter, create };
+    },
     trustedOrigins: [origin],
     disabledPaths: [
       "/request-password-reset",
@@ -74,7 +102,7 @@ export function createAuth(env: Env) {
         : {},
     account: { accountLinking: { enabled: false }, encryptOAuthTokens: true },
     user: {
-      // input: false keeps these operator-only; clients can read but never set them.
+      // Clients can read these fields; only trusted server code can set them.
       additionalFields: {
         actionRequired: {
           type: "boolean",
@@ -92,23 +120,31 @@ export function createAuth(env: Env) {
       user: {
         create: {
           before: async (user) => {
-            if (user.username) return;
-
-            for (let attempt = 0; attempt < 100; attempt++) {
-              const username = `user${10000 + Math.floor(Math.random() * 90000)}`;
-              // Include manually assigned names; the unique index also guards concurrent signups.
-              const existing = await env.DB.prepare(
-                'SELECT id FROM "user" WHERE lower(username) = ? LIMIT 1',
-              )
-                .bind(username)
-                .first();
-              if (!existing)
-                return { data: { ...user, username, displayUsername: username } };
-            }
-
-            throw new APIError("SERVICE_UNAVAILABLE", {
-              message: "Unable to assign a username. Please try again.",
-            });
+            const requested = user.username;
+            if (requested && !validUsername(requested))
+              throw new APIError("BAD_REQUEST", { message: "Choose a valid username." });
+            const profane = requested
+              ? flagged.has(requested) || (!checked.has(requested) && await containsProfanity(requested))
+              : false;
+            const display = flagged.has(requested ?? "") ? requested!
+              : !requested || profane ? await generateUsername(env.DB) : requested;
+            if (!requested || profane) generated.add(display);
+            return { data: {
+              ...user,
+              username: display.toLowerCase(),
+              displayUsername: display,
+              ...(profane ? inappropriateUsernameAction : {}),
+            } };
+          },
+        },
+        update: {
+          before: async (user) => {
+            // All username writes must use the conditional, moderated write below.
+            // This also blocks future/internal adapter paths from bypassing it.
+            if ("username" in user || "displayUsername" in user)
+              throw new APIError("BAD_REQUEST", {
+                message: "Use the username update flow to change your username.",
+              });
           },
         },
       },
@@ -136,6 +172,7 @@ export function createAuth(env: Env) {
         "/sign-in/*": { window: 60, max: 5 },
         "/sign-up/*": { window: 60, max: 3 },
         "/is-username-available": { window: 60, max: 20 },
+        "/update-user": { window: 60, max: 10 },
         "/change-email": { window: 60, max: 5 },
         "/change-password": { window: 60, max: 5 },
         "/delete-user": { window: 60, max: 5 },
@@ -150,16 +187,35 @@ export function createAuth(env: Env) {
           throw new APIError("BAD_REQUEST", {
             message: "Choose a valid username.",
           });
-        if (
-          ctx.path === "/update-user" &&
-          ctx.body &&
-          "username" in ctx.body &&
-          (typeof ctx.body.username !== "string" ||
-            !validUsername(ctx.body.username))
-        )
-          throw new APIError("BAD_REQUEST", {
-            message: "Choose a valid username.",
-          });
+        if (ctx.path === "/sign-up/email" && ctx.body) {
+          // Never accept an independently chosen display name.
+          const requested = String(ctx.body.username);
+          if (await containsProfanity(requested)) {
+            const replacement = await generateUsername(env.DB);
+            generated.add(replacement);
+            flagged.add(replacement);
+            ctx.body.username = replacement;
+          } else checked.add(requested);
+          ctx.body.displayUsername = ctx.body.username;
+        }
+        if (ctx.path === "/update-user" && ctx.body &&
+            ("username" in ctx.body || "displayUsername" in ctx.body ||
+             "resolveInappropriateUsername" in ctx.body)) {
+          const session = await getSessionFromCtx(ctx);
+          if (!session)
+            throw new APIError("UNAUTHORIZED", { message: "Sign in again to continue." });
+          if (ctx.body.email !== undefined)
+            throw new APIError("BAD_REQUEST", { message: "Use the email change flow to change your email." });
+          if ((ctx.body.name !== undefined && typeof ctx.body.name !== "string") ||
+              (ctx.body.image !== undefined && ctx.body.image !== null && typeof ctx.body.image !== "string"))
+            throw new APIError("BAD_REQUEST", { message: "Choose valid profile details." });
+          // A display-only update is also a username change, never an unchecked alias.
+          await updateUsername(env.DB, session.user.id,
+            ctx.body.username ?? ctx.body.displayUsername,
+            ctx.body.resolveInappropriateUsername === true,
+            { name: ctx.body.name, image: ctx.body.image });
+          return ctx.json({ status: true });
+        }
         if (ctx.path === "/change-email" || ctx.path === "/delete-user") {
           const session = await getSessionFromCtx(ctx);
           if (!session)

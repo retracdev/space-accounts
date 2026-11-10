@@ -658,3 +658,17 @@ footer {
   transition: none;
   animation: none;
 }
+
+.username-success {
+  text-align: center;
+}
+.username-success .subtle {
+  margin-bottom: 0;
+}
+.success-icon {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 24px;
+  color: #c0e1c9;
+}

@@ -19,7 +19,7 @@ export const user = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
     username: text("username").unique(),
     displayUsername: text("display_username"),
-    // Set by operators only; surfaced to approved websites through get-session.
+    // Set by trusted server code; surfaced to approved websites through get-session.
     actionRequired: integer("action_required", { mode: "boolean" })
       .notNull()
       .default(false),

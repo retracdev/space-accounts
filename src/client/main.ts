@@ -35,7 +35,7 @@ const field = (
   autocomplete = "",
   help = "",
 ) =>
-  `<div class="field"><label for="${name}">${label}</label><input id="${name}" name="${name}" type="${type}" value="${escape(value)}" autocomplete="${autocomplete}" required ${type === "password" ? 'minlength="12" maxlength="128"' : ""} ${name === "username" ? 'minlength="3" maxlength="20" pattern="[a-zA-Z0-9_]{3,20}" autocapitalize="none" spellcheck="false" aria-describedby="username-help username-status"' : ""}>${help ? `<small class="help" id="${name}-help">${help}</small>` : ""}${name === "username" ? '<small class="help" id="username-status" role="status"></small>' : ""}</div>`;
+  `<div class="field"><label for="${name}">${label}</label><input id="${name}" name="${name}" type="${type}" value="${escape(value)}" autocomplete="${autocomplete}" required ${type === "password" ? 'minlength="7" maxlength="128"' : ""} ${name === "username" ? 'minlength="3" maxlength="20" pattern="[a-zA-Z0-9_]{3,20}" autocapitalize="none" spellcheck="false" aria-describedby="username-help username-status"' : ""}>${help ? `<small class="help" id="${name}-help">${help}</small>` : ""}${name === "username" ? '<small class="help" id="username-status" role="status"></small>' : ""}</div>`;
 // Google's standard "G" mark, as its sign-in branding guidelines require.
 const GOOGLE_LOGO =
   '<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
@@ -176,7 +176,7 @@ function authLayout(signup: boolean) {
   // Step two: password (or a new account's details), or Google.
   const credentials = (identifier: string) => {
     message("");
-    step.innerHTML = `<div class="identity"><span>${escape(identifier)}</span><button type="button" class="text-button" id="change-identity">Change</button></div><form id="auth-form"><input type="hidden" name="${signup ? "email" : "identifier"}" value="${escape(identifier)}" autocomplete="${signup ? "email" : "username"}">${signup ? field("username", "Username", "text", "", "username", USERNAME_HELP) : ""}${field("password", "Password", "password", "", signup ? "new-password" : "current-password", signup ? "At least 12 characters." : "")}<button class="wide" type="submit">${signup ? "Create account" : "Sign in"}</button></form>${googleEnabled ? `<div class="divider">or</div><button id="google" class="secondary wide">${GOOGLE_LOGO}Continue with Google</button>` : ""}`;
+    step.innerHTML = `<div class="identity"><span>${escape(identifier)}</span><button type="button" class="text-button" id="change-identity">Change</button></div><form id="auth-form"><input type="hidden" name="${signup ? "email" : "identifier"}" value="${escape(identifier)}" autocomplete="${signup ? "email" : "username"}">${signup ? field("username", "Username", "text", "", "username", USERNAME_HELP) : ""}${field("password", "Password", "password", "", signup ? "new-password" : "current-password", signup ? "At least 7 characters." : "")}<button class="wide" type="submit">${signup ? "Create account" : "Sign in"}</button></form>${googleEnabled ? `<div class="divider">or</div><button id="google" class="secondary wide">${GOOGLE_LOGO}Continue with Google</button>` : ""}`;
     document.querySelector("#change-identity")?.addEventListener("click", () => {
       message("");
       identify(identifier);
@@ -329,7 +329,7 @@ function renderUnlinkGoogle(user: User) {
     root.innerHTML = `<section class="single panel"><h1>No action required</h1><p class="subtle">Your account does not need a new password.</p><a class="button wide" href="/settings" data-nav>Account settings</a></section>`;
     return;
   }
-  root.innerHTML = `<section class="single panel"><h1>Sign in with Google is no longer available</h1><p class="subtle">Sign in with Google is no longer available for your account, so you'll need to set a password. Once you set a password, your Google account will be unlinked.</p><form id="unlink-google-form"><input type="hidden" name="username" value="${escape(user.username ?? user.email)}" autocomplete="username">${field("newPassword", "New password", "password", "", "new-password", "At least 12 characters. Password recovery is not available.")}${field("confirmPassword", "Confirm password", "password", "", "new-password")}<button type="submit" class="wide">Set password</button></form>${notice}<button class="text-button" id="signout">Sign out</button></section>`;
+  root.innerHTML = `<section class="single panel"><h1>Sign in with Google is no longer available</h1><p class="subtle">Sign in with Google is no longer available for your account, so you'll need to set a password. Once you set a password, your Google account will be unlinked.</p><form id="unlink-google-form"><input type="hidden" name="username" value="${escape(user.username ?? user.email)}" autocomplete="username">${field("newPassword", "New password", "password", "", "new-password", "At least 7 characters. Password recovery is not available.")}${field("confirmPassword", "Confirm password", "password", "", "new-password")}<button type="submit" class="wide">Set password</button></form>${notice}<button class="text-button" id="signout">Sign out</button></section>`;
   bindSignout();
   bindForm("unlink-google-form", async (data) => {
     const password = String(data.get("newPassword"));
@@ -409,7 +409,7 @@ async function sensitiveSettings(user: User) {
     (account) => account.providerId === "credential",
   );
   area.innerHTML = credential
-    ? `<form id="password-form">${field("currentPassword", "Current password", "password", "", "current-password")}${field("newPassword", "New password", "password", "", "new-password", "At least 12 characters.")}<button type="submit">Change password</button><p class="fine">Your other sessions will be signed out.</p></form>`
+    ? `<form id="password-form">${field("currentPassword", "Current password", "password", "", "current-password")}${field("newPassword", "New password", "password", "", "new-password", "At least 7 characters.")}<button type="submit">Change password</button><p class="fine">Your other sessions will be signed out.</p></form>`
     : '<p class="subtle">You sign in with Google. Your password is managed by Google.</p>';
   document.querySelector("#email-area")!.innerHTML = credential
     ? `<form id="email-form">${field("email", "New email address", "email", "", "email")}${field("emailPassword", "Current password", "password", "", "current-password")}<button type="submit">Change email</button></form>`

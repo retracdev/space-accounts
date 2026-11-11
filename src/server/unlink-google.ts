@@ -49,8 +49,8 @@ export function unlinkGoogle(db: D1Database) {
           const password = String(
             (ctx.body as { newPassword?: unknown } | undefined)?.newPassword ?? "",
           );
-          if (password.length < 12 || password.length > 128)
-            throw new APIError("BAD_REQUEST", { message: "Use 12 to 128 characters for your password." });
+          if (password.length < 7 || password.length > 128)
+            throw new APIError("BAD_REQUEST", { message: "Use 7 to 128 characters for your password." });
           const row = await db.prepare(
             'SELECT id, action_required_reason FROM "user" WHERE id = ?',
           ).bind(session.user.id).first<Flagged>();

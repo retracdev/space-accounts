@@ -13,6 +13,7 @@ import { containsProfanity, generateUsername, inappropriateUsernameAction, updat
 import { symmetricEncrypt } from "better-auth/crypto";
 import { importJWK } from "jose";
 import { unlinkGoogle } from "./unlink-google";
+import { duplicateGoogle } from "./duplicate-google";
 import { googleBlocked } from "../shared/google-blacklist";
 
 // Sign in with Google is refused for domains listed in blacklist-google.yml.
@@ -202,6 +203,7 @@ export function createAuth(env: Env) {
         "/delete-user": { window: 60, max: 5 },
         "/unlink-google/identify": { window: 60, max: 10 },
         "/unlink-google/set-password": { window: 60, max: 5 },
+        "/duplicate-google-error/dismiss": { window: 60, max: 5 },
       },
     },
     hooks: {
@@ -276,6 +278,7 @@ export function createAuth(env: Env) {
     },
     plugins: [
       unlinkGoogle(env.DB),
+      duplicateGoogle(env.DB),
       jwt({
         disableSettingJwtHeader: true,
         jwks: { keyPairConfig: { alg: "ES256" } },

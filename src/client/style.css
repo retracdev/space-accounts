@@ -203,6 +203,10 @@ button:disabled {
 .wide {
   width: 100%;
 }
+.actions {
+  display: grid;
+  gap: 10px;
+}
 .secondary {
   background: transparent;
   color: #f3f0ff;

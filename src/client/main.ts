@@ -16,6 +16,8 @@ let currentUser: User | undefined;
 let googleEnabled = false;
 const requiredUsernamePath = "/change-username-required-1";
 const unlinkGooglePath = "/unlink-google-required-setpw";
+const duplicateGooglePath = "/duplicate-google-error";
+const requiredPaths = [requiredUsernamePath, unlinkGooglePath, duplicateGooglePath];
 type AccountAction = {
   actionRequired?: boolean;
   actionRequiredReason?: string | null;
@@ -169,7 +171,7 @@ function authLayout(signup: boolean) {
     setTimeout(() => navigate("/"), motion.matches ? 0 : 280);
   });
   const destination =
-    location.pathname === requiredUsernamePath || location.pathname === unlinkGooglePath
+    requiredPaths.includes(location.pathname)
       ? location.pathname
       : "/settings";
   const step = document.querySelector<HTMLElement>("#auth-step")!;
@@ -277,12 +279,13 @@ async function render() {
   currentUser = session.data?.user;
   const path = location.pathname;
   const form = path === "/sign-in" || path === "/sign-up";
-  const required = path === requiredUsernamePath || path === unlinkGooglePath;
+  const required = requiredPaths.includes(path);
   if (currentUser || form || required) await hideModeCards();
   else showModeCards();
   if (currentUser) {
     if (path === requiredUsernamePath) renderRequiredUsername(currentUser);
     else if (path === unlinkGooglePath) renderUnlinkGoogle(currentUser);
+    else if (path === duplicateGooglePath) renderDuplicateGoogle(currentUser);
     else if (!currentUser.username) renderUsername();
     else renderSettings(currentUser);
   } else if (required) {
@@ -404,6 +407,40 @@ function renderUnlinkGoogle(user: User) {
     root.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
   });
 }
+function renderDuplicateGoogle(user: User) {
+  document.title = "Duplicate account · retrac.space";
+  if ((user as User & AccountAction).actionRequiredReason !== "duplicate_google_error") {
+    root.innerHTML = `<section class="single panel"><h1>No action required</h1><p class="subtle">There is no duplicate account notice on this account.</p><a class="button wide" href="/settings" data-nav>Account settings</a></section>`;
+    return;
+  }
+  root.innerHTML = `<section class="single panel"><h1>It looks like you made a duplicate account</h1><p class="subtle">You may have created this account because you were unable to access your Google account. We have fixed that. Log out, then log in with your original username, and you'll be able to set a password and unlink Google.</p><div class="actions"><button type="button" class="wide" id="signout">Log out</button><button type="button" class="secondary wide" id="keep-account">This is wrong / I want to use this account now</button></div>${notice}</section>`;
+  bindSignout();
+  const keep = root.querySelector<HTMLButtonElement>("#keep-account")!;
+  keep.addEventListener("click", async () => {
+    keep.disabled = true;
+    try {
+      const response = await fetch("/api/auth/duplicate-google-error/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok)
+        throw new Error(response.status === 429
+          ? "Too many attempts. Please wait a few minutes."
+          : result.message || "Unable to update your account. Please try again.");
+      history.pushState({}, "", "/settings");
+      await render();
+      message("You can keep using this account.");
+    } catch (error) {
+      keep.disabled = false;
+      message(
+        error instanceof Error ? error.message : "Unable to connect. Please try again.",
+        true,
+      );
+    }
+  });
+}
 function bindSignout() {
   document.querySelector("#signout")?.addEventListener("click", async () => {
     try {
@@ -417,9 +454,14 @@ function bindSignout() {
 function renderSettings(user: User) {
   root.innerHTML = `<div class="settings"><section class="panel profile"><div class="avatar" aria-hidden="true">${escape(user.username!.charAt(0).toUpperCase())}</div><div class="profile-text"><p class="eyebrow">Your account</p><h1>Hey, ${escape(user.username!)}.</h1><p class="subtle">${escape(user.email)}</p></div><button class="secondary" id="signout">Sign out</button></section>${notice}<div class="dashboard"><section class="panel"><p class="card-label">Profile</p><h2>Username</h2><p class="subtle">How you are known across retrac.space.</p><form id="username-form">${field("username", "Username", "text", user.username!, "username", USERNAME_HELP)}<button type="submit">Save username</button></form></section><section class="panel"><p class="card-label">Sign-in</p><h2>Email</h2><p class="subtle">${escape(user.email)}</p><div id="email-area"><p class="help">Loading sign-in methods...</p></div></section><section class="panel"><p class="card-label">Security</p><h2>Password</h2><p class="subtle">Keep it safe. There is no password recovery.</p><div id="password-area"></div></section><section class="panel danger"><p class="card-label">Danger zone</p><h2>Delete account</h2><p class="subtle">Permanently remove your account and its sign-in data.</p><details><summary>Delete my account</summary><p>This cannot be undone. You will lose access to this identity across retrac.space.</p><div id="delete-area"></div></details></section></div></div>`;
   const reason = (user as User & AccountAction).actionRequiredReason;
-  if (reason === "inappropriate_username" || reason === "auth_unlink_google") {
+  const actionPaths: Record<string, string> = {
+    inappropriate_username: requiredUsernamePath,
+    auth_unlink_google: unlinkGooglePath,
+    duplicate_google_error: duplicateGooglePath,
+  };
+  if (reason && Object.hasOwn(actionPaths, reason)) {
     const link = document.createElement("a");
-    link.href = reason === "auth_unlink_google" ? unlinkGooglePath : requiredUsernamePath;
+    link.href = actionPaths[reason];
     link.dataset.nav = "";
     link.className = "button secondary wide";
     link.textContent = "Resolve account issue";

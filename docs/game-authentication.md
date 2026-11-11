@@ -99,6 +99,23 @@ If that identifier belongs to a flagged account, the user is signed in **without
 password** so a locked-out owner can set one. This applies only while the flag is set;
 it is cleared as soon as a password is saved. Flag only accounts that need it.
 
+### Duplicate account notice (`duplicate_google_error`)
+
+Flag an account that looks like a duplicate made while its owner could not reach
+their Google-linked account:
+
+```sql
+UPDATE user SET action_required = 1, action_required_reason = 'duplicate_google_error',
+  action_required_url = 'https://accounts.retrac.space/duplicate-google-error'
+WHERE username = 'retrac';
+```
+
+Apps send the visitor to `/duplicate-google-error`. The page explains that the Google
+issue is fixed and that logging in with their original username lets them set a
+password and unlink Google. It offers **Log out**, or **This is wrong / I want to use
+this account now**, which clears the flag (POST `/api/auth/duplicate-google-error/dismiss`)
+so the account can be used normally.
+
 Both internal routes require POST, JSON, **no Origin header**, and
 `X-Space-Api-Key`. They return no cookies or CORS headers and are no-store:
 

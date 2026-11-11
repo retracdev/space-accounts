@@ -1,4 +1,5 @@
 # Email domains that cannot use "Continue with Google".
 # Separate domains with commas. Subdomains are blocked too
 # (blocking example.com also blocks mail.example.com).
-domains: example.com
+domains: example.com,st-annes.org
+# We are blocking st-annes.org following multiple bug reports indicating that the domain administrator has not enabled access to the Sign in with Google feature.

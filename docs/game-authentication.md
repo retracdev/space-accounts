@@ -80,6 +80,25 @@ Flag an account with, for example:
 UPDATE user SET action_required = 1, action_required_reason = 'account_review' WHERE username = 'retrac';
 ```
 
+### Moving an account off Google sign-in (`auth_unlink_google`)
+
+Flag an account to require it to set a password and drop its Google link:
+
+```sql
+UPDATE user SET action_required = 1, action_required_reason = 'auth_unlink_google',
+  action_required_url = 'https://accounts.retrac.space/unlink-google-required-setpw'
+WHERE username = 'retrac';
+```
+
+Apps send the visitor to `/unlink-google-required-setpw`. There the user sets a
+password; the server then deletes the Google account link and clears the flag, and the
+page shows their username, email, and password.
+
+**Deliberate trade-off:** sign-in and sign-up now start with an email/username step.
+If that identifier belongs to a flagged account, the user is signed in **without a
+password** so a locked-out owner can set one. This applies only while the flag is set;
+it is cleared as soon as a password is saved. Flag only accounts that need it.
+
 Both internal routes require POST, JSON, **no Origin header**, and
 `X-Space-Api-Key`. They return no cookies or CORS headers and are no-store:
 

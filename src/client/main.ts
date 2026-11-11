@@ -14,6 +14,7 @@ type User = NonNullable<
 let currentUser: User | undefined;
 let googleEnabled = false;
 const requiredUsernamePath = "/change-username-required-1";
+const unlinkGooglePath = "/unlink-google-required-setpw";
 type AccountAction = {
   actionRequired?: boolean;
   actionRequiredReason?: string | null;
@@ -132,57 +133,94 @@ function usernameAvailability() {
   });
 }
 function authLayout(signup: boolean) {
-  root.innerHTML = `<div class="auth-layout"><section class="intro"><p class="eyebrow">retrac.space accounts</p><h1>Welcome to<br>retrac.space.</h1><p>The one account you use to access everything on retrac.space.</p></section><section class="panel" aria-label="${signup ? "Create account" : "Sign in"}"><button type="button" class="text-button back" id="back">← Back</button><h2>${signup ? "Find your space." : "Welcome back."}</h2><p class="subtle">${signup ? "Choose the name you’ll play with." : "Pick up where you left off."}</p><form id="auth-form">${signup ? field("username", "Username", "text", "", "username", USERNAME_HELP) : field("identifier", "Username or email", "text", "", "username")}${signup ? field("email", "Email", "email", "", "email") : ""}${!signup ? '<div class="split"><label for="password">Password</label></div>' : ""}${field("password", signup ? "Password" : "Password", "password", "", signup ? "new-password" : "current-password", signup ? "At least 12 characters." : "")}<button class="wide" type="submit">${signup ? "Create account" : "Sign in"}</button></form>${googleEnabled ? `<div class="divider">or</div><button id="google" class="secondary wide">${GOOGLE_LOGO}Continue with Google</button>` : ""}${notice}<p class="fine">${signup ? "Keep your password safe. Password recovery is not available." : "Your account works across retrac.space."}</p></section></div>`;
+  root.innerHTML = `<div class="auth-layout"><section class="intro"><p class="eyebrow">retrac.space accounts</p><h1>Welcome to<br>retrac.space.</h1><p>The one account you use to access everything on retrac.space.</p></section><section class="panel" aria-label="${signup ? "Create account" : "Sign in"}"><button type="button" class="text-button back" id="back">← Back</button><h2>${signup ? "Find your space." : "Welcome back."}</h2><p class="subtle">${signup ? "Start with your email." : "Pick up where you left off."}</p><div id="auth-step"></div>${notice}<p class="fine">${signup ? "Keep your password safe. Password recovery is not available." : "Your account works across retrac.space."}</p></section></div>`;
   document.querySelector("#back")?.addEventListener("click", () => {
     root.querySelector(".auth-layout")?.classList.add("leaving");
     setTimeout(() => navigate("/"), motion.matches ? 0 : 280);
   });
-  if (!signup)
-    document
-      .querySelector(".field:has(#password) label")
-      ?.setAttribute("hidden", "");
-  const destination = location.pathname === requiredUsernamePath ? requiredUsernamePath : "/settings";
-  bindForm("auth-form", async (data) => {
-    const username = String(data.get(signup ? "username" : "identifier")),
-      password = String(data.get("password"));
-    if (signup) {
-      check(
-        await auth.signUp.email({
-          username,
-          name: username,
-          email: String(data.get("email")),
-          password,
-        }),
-      );
-      navigate(destination);
-    } else {
-      check(
-        username.includes("@")
-          ? await auth.signIn.email({ email: username, password })
-          : await auth.signIn.username({ username, password }),
-      );
-      navigate(destination);
-    }
-  });
-  document
-    .querySelector("#google")
-    ?.addEventListener("click", async (event) => {
-      const button = event.currentTarget as HTMLButtonElement;
-      button.disabled = true;
-      try {
-        check(
-          await auth.signIn.social({
-            provider: "google",
-            callbackURL: destination,
-            errorCallbackURL: "/sign-in?error=oauth",
-          }),
-        );
-      } catch {
-        message("Unable to continue with Google. Please try again.", true);
-        button.disabled = false;
+  const destination =
+    location.pathname === requiredUsernamePath || location.pathname === unlinkGooglePath
+      ? location.pathname
+      : "/settings";
+  const step = document.querySelector<HTMLElement>("#auth-step")!;
+  const focusFirst = () =>
+    step.querySelector<HTMLInputElement>("input:not([type=hidden])")?.focus();
+
+  // Step one: the email (or username) only.
+  const identify = (value = "") => {
+    step.innerHTML = `<form id="identify-form">${signup ? field("email", "Email", "email", value, "email") : field("identifier", "Username or email", "text", value, "username")}<button class="wide" type="submit">Next</button></form>`;
+    bindForm("identify-form", async (data) => {
+      const identifier = String(data.get(signup ? "email" : "identifier")).trim();
+      const response = await fetch("/api/auth/unlink-google/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        signedIn?: boolean;
+        redirect?: string;
+        message?: string;
+      };
+      if (!response.ok)
+        throw new Error(response.status === 429
+          ? "Too many attempts. Please wait a few minutes."
+          : result.message || "Please try again.");
+      if (result.signedIn) {
+        navigate(result.redirect || unlinkGooglePath);
+        return;
       }
+      credentials(identifier);
     });
-  usernameAvailability();
+  };
+
+  // Step two: password (or a new account's details), or Google.
+  const credentials = (identifier: string) => {
+    message("");
+    step.innerHTML = `<div class="identity"><span>${escape(identifier)}</span><button type="button" class="text-button" id="change-identity">Change</button></div><form id="auth-form"><input type="hidden" name="${signup ? "email" : "identifier"}" value="${escape(identifier)}" autocomplete="${signup ? "email" : "username"}">${signup ? field("username", "Username", "text", "", "username", USERNAME_HELP) : ""}${field("password", "Password", "password", "", signup ? "new-password" : "current-password", signup ? "At least 12 characters." : "")}<button class="wide" type="submit">${signup ? "Create account" : "Sign in"}</button></form>${googleEnabled ? `<div class="divider">or</div><button id="google" class="secondary wide">${GOOGLE_LOGO}Continue with Google</button>` : ""}`;
+    document.querySelector("#change-identity")?.addEventListener("click", () => {
+      message("");
+      identify(identifier);
+      focusFirst();
+    });
+    bindForm("auth-form", async (data) => {
+      const password = String(data.get("password"));
+      if (signup) {
+        const username = String(data.get("username"));
+        check(
+          await auth.signUp.email({ username, name: username, email: identifier, password }),
+        );
+      } else {
+        check(
+          identifier.includes("@")
+            ? await auth.signIn.email({ email: identifier, password })
+            : await auth.signIn.username({ username: identifier, password }),
+        );
+      }
+      navigate(destination);
+    });
+    document
+      .querySelector("#google")
+      ?.addEventListener("click", async (event) => {
+        const button = event.currentTarget as HTMLButtonElement;
+        button.disabled = true;
+        try {
+          check(
+            await auth.signIn.social({
+              provider: "google",
+              callbackURL: destination,
+              errorCallbackURL: "/sign-in?error=oauth",
+            }),
+          );
+        } catch {
+          message("Unable to continue with Google. Please try again.", true);
+          button.disabled = false;
+        }
+      });
+    usernameAvailability();
+    focusFirst();
+  };
+
+  identify();
 }
 function simple(title: string, description: string, content: string) {
   root.innerHTML = `<section class="single panel"><h1>${title}</h1><p class="subtle">${description}</p>${content}${notice}<p class="fine"><a href="/sign-in" data-nav>Back to sign in</a></p></section>`;
@@ -204,13 +242,15 @@ async function render() {
   currentUser = session.data?.user;
   const path = location.pathname;
   const form = path === "/sign-in" || path === "/sign-up";
-  if (currentUser || form || path === requiredUsernamePath) await hideModeCards();
+  const required = path === requiredUsernamePath || path === unlinkGooglePath;
+  if (currentUser || form || required) await hideModeCards();
   else showModeCards();
   if (currentUser) {
     if (path === requiredUsernamePath) renderRequiredUsername(currentUser);
+    else if (path === unlinkGooglePath) renderUnlinkGoogle(currentUser);
     else if (!currentUser.username) renderUsername();
     else renderSettings(currentUser);
-  } else if (path === requiredUsernamePath) {
+  } else if (required) {
     authLayout(false);
   } else if (!form) {
     root.innerHTML = "";
@@ -283,6 +323,49 @@ function renderRequiredUsername(user: User) {
     root.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
   });
 }
+function renderUnlinkGoogle(user: User) {
+  document.title = "Set a password · retrac.space";
+  if ((user as User & AccountAction).actionRequiredReason !== "auth_unlink_google") {
+    root.innerHTML = `<section class="single panel"><h1>No action required</h1><p class="subtle">Your account does not need a new password.</p><a class="button wide" href="/settings" data-nav>Account settings</a></section>`;
+    return;
+  }
+  root.innerHTML = `<section class="single panel"><h1>Sign in with Google is no longer available</h1><p class="subtle">Sign in with Google is no longer available for your account, so you'll need to set a password. Once you set a password, your Google account will be unlinked.</p><form id="unlink-google-form"><input type="hidden" name="username" value="${escape(user.username ?? user.email)}" autocomplete="username">${field("newPassword", "New password", "password", "", "new-password", "At least 12 characters. Password recovery is not available.")}${field("confirmPassword", "Confirm password", "password", "", "new-password")}<button type="submit" class="wide">Set password</button></form>${notice}<button class="text-button" id="signout">Sign out</button></section>`;
+  bindSignout();
+  bindForm("unlink-google-form", async (data) => {
+    const password = String(data.get("newPassword"));
+    if (password !== String(data.get("confirmPassword")))
+      throw new Error("Passwords do not match.");
+    const response = await fetch("/api/auth/unlink-google/set-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword: password }),
+    });
+    const result = (await response.json().catch(() => ({}))) as {
+      username?: string | null;
+      email?: string;
+      message?: string;
+    };
+    if (!response.ok)
+      throw new Error(response.status === 429
+        ? "Too many attempts. Please wait a few minutes."
+        : result.message || "Unable to set your password. Please try again.");
+    const session = await auth.getSession();
+    if (!session.error) currentUser = session.data?.user ?? currentUser;
+    const username = result.username ?? user.username ?? "";
+    const email = result.email ?? user.email;
+    document.title = "Password set · retrac.space";
+    root.innerHTML = `<section class="single panel username-success" role="status"><svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m7.5 12 3 3 6-6"/></svg><h1 tabindex="-1">Your password is set</h1><p class="subtle">Your Google account has been unlinked. You can now go back to wherever you were and sign in with these details from now on.</p><dl class="login-details"><div><dt>Username</dt><dd>${escape(username)}</dd></div><div><dt>Email</dt><dd>${escape(email)}</dd></div><div><dt>Password</dt><dd class="reveal"><span id="password-value">${"•".repeat(Math.min(password.length, 16))}</span><button type="button" class="text-button" id="reveal-password" aria-pressed="false">Show</button></dd></div></dl></section>`;
+    const value = root.querySelector<HTMLElement>("#password-value")!;
+    const toggle = root.querySelector<HTMLButtonElement>("#reveal-password")!;
+    toggle.addEventListener("click", () => {
+      const shown = toggle.getAttribute("aria-pressed") !== "true";
+      value.textContent = shown ? password : "•".repeat(Math.min(password.length, 16));
+      toggle.textContent = shown ? "Hide" : "Show";
+      toggle.setAttribute("aria-pressed", String(shown));
+    });
+    root.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
+  });
+}
 function bindSignout() {
   document.querySelector("#signout")?.addEventListener("click", async () => {
     try {
@@ -295,9 +378,10 @@ function bindSignout() {
 }
 function renderSettings(user: User) {
   root.innerHTML = `<div class="settings"><section class="panel profile"><div class="avatar" aria-hidden="true">${escape(user.username!.charAt(0).toUpperCase())}</div><div class="profile-text"><p class="eyebrow">Your account</p><h1>Hey, ${escape(user.username!)}.</h1><p class="subtle">${escape(user.email)}</p></div><button class="secondary" id="signout">Sign out</button></section>${notice}<div class="dashboard"><section class="panel"><p class="card-label">Profile</p><h2>Username</h2><p class="subtle">How you are known across retrac.space.</p><form id="username-form">${field("username", "Username", "text", user.username!, "username", USERNAME_HELP)}<button type="submit">Save username</button></form></section><section class="panel"><p class="card-label">Sign-in</p><h2>Email</h2><p class="subtle">${escape(user.email)}</p><div id="email-area"><p class="help">Loading sign-in methods...</p></div></section><section class="panel"><p class="card-label">Security</p><h2>Password</h2><p class="subtle">Keep it safe. There is no password recovery.</p><div id="password-area"></div></section><section class="panel danger"><p class="card-label">Danger zone</p><h2>Delete account</h2><p class="subtle">Permanently remove your account and its sign-in data.</p><details><summary>Delete my account</summary><p>This cannot be undone. You will lose access to this identity across retrac.space.</p><div id="delete-area"></div></details></section></div></div>`;
-  if ((user as User & AccountAction).actionRequiredReason === "inappropriate_username") {
+  const reason = (user as User & AccountAction).actionRequiredReason;
+  if (reason === "inappropriate_username" || reason === "auth_unlink_google") {
     const link = document.createElement("a");
-    link.href = requiredUsernamePath;
+    link.href = reason === "auth_unlink_google" ? unlinkGooglePath : requiredUsernamePath;
     link.dataset.nav = "";
     link.className = "button secondary wide";
     link.textContent = "Resolve account issue";

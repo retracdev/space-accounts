@@ -12,6 +12,7 @@ import { validUsername } from "../shared/username";
 import { containsProfanity, generateUsername, inappropriateUsernameAction, updateUsername } from "./usernames";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { importJWK } from "jose";
+import { unlinkGoogle } from "./unlink-google";
 
 export interface Env {
   DB: D1Database;
@@ -176,6 +177,8 @@ export function createAuth(env: Env) {
         "/change-email": { window: 60, max: 5 },
         "/change-password": { window: 60, max: 5 },
         "/delete-user": { window: 60, max: 5 },
+        "/unlink-google/identify": { window: 60, max: 10 },
+        "/unlink-google/set-password": { window: 60, max: 5 },
       },
     },
     hooks: {
@@ -249,6 +252,7 @@ export function createAuth(env: Env) {
       }),
     },
     plugins: [
+      unlinkGoogle(env.DB),
       jwt({
         disableSettingJwtHeader: true,
         jwks: { keyPairConfig: { alg: "ES256" } },

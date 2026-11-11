@@ -13,6 +13,18 @@ import { containsProfanity, generateUsername, inappropriateUsernameAction, updat
 import { symmetricEncrypt } from "better-auth/crypto";
 import { importJWK } from "jose";
 import { unlinkGoogle } from "./unlink-google";
+import { googleBlocked } from "../shared/google-blacklist";
+
+// Sign in with Google is refused for domains listed in blacklist-google.yml.
+const googleCallback = (
+  ctx: { path?: string; params?: Record<string, string | undefined> } | null,
+) =>
+  ctx?.path === "/callback/:id" && ctx.params?.id === "google";
+const blockedGoogleDomain = () =>
+  new APIError("FORBIDDEN", {
+    message: "Sign in with Google is unavailable for your domain.",
+    code: "GOOGLE_DOMAIN_BLOCKED",
+  });
 
 export interface Env {
   DB: D1Database;
@@ -118,9 +130,20 @@ export function createAuth(env: Env) {
       deleteUser: { enabled: true },
     },
     databaseHooks: {
+      session: {
+        create: {
+          before: async (session, ctx) => {
+            if (!googleCallback(ctx)) return;
+            const row = await env.DB.prepare('SELECT email FROM "user" WHERE id = ?')
+              .bind(session.userId).first<{ email: string }>();
+            if (googleBlocked(row?.email)) throw blockedGoogleDomain();
+          },
+        },
+      },
       user: {
         create: {
-          before: async (user) => {
+          before: async (user, ctx) => {
+            if (googleCallback(ctx) && googleBlocked(user.email)) throw blockedGoogleDomain();
             const requested = user.username;
             if (requested && !validUsername(requested))
               throw new APIError("BAD_REQUEST", { message: "Choose a valid username." });

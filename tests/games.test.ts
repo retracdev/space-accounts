@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { build } from "esbuild";
+import { rawText } from "../esbuild-raw";
 import { readFileSync, readdirSync } from "node:fs";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { decodeJwt, decodeProtectedHeader, importJWK, SignJWT, generateKeyPair, exportJWK } from "jose";
@@ -30,7 +31,7 @@ beforeAll(async () => {
   const { privateKey } = await generateKeyPair("ES256", { extractable: true });
   const output = await build({ entryPoints: ["src/server/worker.ts"], bundle: true, write: false,
     format: "esm", platform: "neutral", target: "es2022", conditions: ["workerd", "worker", "browser"],
-    external: ["node:*", "cloudflare:*"] });
+    external: ["node:*", "cloudflare:*"], plugins: [rawText] });
   mf = new Miniflare({ modules: true, script: output.outputFiles[0].text,
     compatibilityDate: "2026-07-01", compatibilityFlags: ["nodejs_compat"], d1Databases: ["DB"],
     bindings: { BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: secret, ACCOUNTS_API_KEY: serviceKey,

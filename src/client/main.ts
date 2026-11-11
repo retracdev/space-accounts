@@ -1,6 +1,7 @@
 import { createAuthClient } from "better-auth/client";
 import { usernameClient } from "better-auth/client/plugins";
 import { validUsername, USERNAME_HELP } from "../shared/username";
+import { googleBlocked } from "../shared/google-blacklist";
 import { hideModeCards, showModeCards } from "./cards";
 import { motion } from "./motion";
 import "./background";
@@ -50,6 +51,35 @@ function message(
     element.textContent = text;
     element.className = `notice ${error ? "error" : "success"}`;
   }
+}
+// Domains listed in blacklist-google.yml cannot use Sign in with Google.
+function googleUnavailable() {
+  document.querySelector(".google-blocked")?.remove();
+  const opener = document.activeElement as HTMLElement | null;
+  const overlay = document.createElement("div");
+  overlay.className = "google-blocked";
+  overlay.innerHTML = `<div class="google-blocked-dialog" role="alertdialog" aria-modal="true" aria-labelledby="google-blocked-title" aria-describedby="google-blocked-text"><div class="google-blocked-icon">${GOOGLE_LOGO}<svg class="google-blocked-slash" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28"/><path d="M12.2 12.2 51.8 51.8"/></svg></div><h2 id="google-blocked-title">Sign in with Google is unavailable</h2><p id="google-blocked-text" class="subtle">Sign in with Google is unavailable for your domain. Please sign in with your password instead.</p><button type="button" class="wide" id="google-blocked-close">Got it</button></div>`;
+  document.body.appendChild(overlay);
+  const close = () => {
+    overlay.classList.add("closing");
+    removeEventListener("keydown", onKey);
+    setTimeout(() => overlay.remove(), motion.matches ? 0 : 220);
+    opener?.focus();
+  };
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape") close();
+    if (event.key === "Tab") {
+      event.preventDefault();
+      button.focus();
+    }
+  };
+  const button = overlay.querySelector<HTMLButtonElement>("#google-blocked-close")!;
+  button.addEventListener("click", close);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+  addEventListener("keydown", onKey);
+  button.focus();
 }
 function navigate(path: string) {
   history.pushState({}, "", path);
@@ -160,6 +190,7 @@ function authLayout(signup: boolean) {
         signedIn?: boolean;
         redirect?: string;
         message?: string;
+        googleBlocked?: boolean;
       };
       if (!response.ok)
         throw new Error(response.status === 429
@@ -169,12 +200,12 @@ function authLayout(signup: boolean) {
         navigate(result.redirect || unlinkGooglePath);
         return;
       }
-      credentials(identifier);
+      credentials(identifier, !!result.googleBlocked);
     });
   };
 
   // Step two: password (or a new account's details), or Google.
-  const credentials = (identifier: string) => {
+  const credentials = (identifier: string, blocked = false) => {
     message("");
     step.innerHTML = `<div class="identity"><span>${escape(identifier)}</span><button type="button" class="text-button" id="change-identity">Change</button></div><form id="auth-form"><input type="hidden" name="${signup ? "email" : "identifier"}" value="${escape(identifier)}" autocomplete="${signup ? "email" : "username"}">${signup ? field("username", "Username", "text", "", "username", USERNAME_HELP) : ""}${field("password", "Password", "password", "", signup ? "new-password" : "current-password", signup ? "At least 7 characters." : "")}<button class="wide" type="submit">${signup ? "Create account" : "Sign in"}</button></form>${googleEnabled ? `<div class="divider">or</div><button id="google" class="secondary wide">${GOOGLE_LOGO}Continue with Google</button>` : ""}`;
     document.querySelector("#change-identity")?.addEventListener("click", () => {
@@ -202,13 +233,17 @@ function authLayout(signup: boolean) {
       .querySelector("#google")
       ?.addEventListener("click", async (event) => {
         const button = event.currentTarget as HTMLButtonElement;
+        if (blocked || googleBlocked(identifier)) {
+          googleUnavailable();
+          return;
+        }
         button.disabled = true;
         try {
           check(
             await auth.signIn.social({
               provider: "google",
               callbackURL: destination,
-              errorCallbackURL: "/sign-in?error=oauth",
+              errorCallbackURL: "/sign-in",
             }),
           );
         } catch {
@@ -257,7 +292,10 @@ async function render() {
   } else {
     authLayout(path === "/sign-up");
     const params = new URLSearchParams(location.search);
-    if (params.has("error"))
+    if (params.get("error") === "GOOGLE_DOMAIN_BLOCKED") {
+      message("Sign in with Google is unavailable for your domain.", true);
+      googleUnavailable();
+    } else if (params.has("error"))
       message("Sign-in could not be completed. Please try again.", true);
     else if (params.has("deleted")) message("Your account has been deleted.");
   }

@@ -1,11 +1,12 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthEndpoint, getSessionFromCtx } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
+import { googleBlocked } from "../shared/google-blacklist";
 
 export const unlinkGoogleReason = "auth_unlink_google";
 export const unlinkGooglePath = "/unlink-google-required-setpw";
 
-type Flagged = { id: string; action_required_reason: string | null };
+type Flagged = { id: string; email: string; action_required_reason: string | null };
 
 // Accounts flagged with auth_unlink_google must move from Google sign-in to a password.
 // Deliberate operator decision: a flagged account can be signed in by username/email
@@ -25,13 +26,15 @@ export function unlinkGoogle(db: D1Database) {
           if (!identifier || identifier.length > 254)
             throw new APIError("BAD_REQUEST", { message: "Enter your username or email." });
           const row = await db.prepare(
-            'SELECT id, action_required_reason FROM "user" WHERE lower(email) = ? OR lower(username) = ? LIMIT 1',
+            'SELECT id, email, action_required_reason FROM "user" WHERE lower(email) = ? OR lower(username) = ? LIMIT 1',
           ).bind(identifier, identifier).first<Flagged>();
+          // Lets the sign-in page say up front that Google is unavailable for this email domain.
+          const blocked = googleBlocked(row?.email ?? identifier);
           // Every other account (or no account) gets the same answer: continue to the password step.
           if (!row || row.action_required_reason !== unlinkGoogleReason)
-            return ctx.json({ signedIn: false });
+            return ctx.json({ signedIn: false, googleBlocked: blocked });
           const user = await ctx.context.internalAdapter.findUserById(row.id);
-          if (!user) return ctx.json({ signedIn: false });
+          if (!user) return ctx.json({ signedIn: false, googleBlocked: blocked });
           const session = await ctx.context.internalAdapter.createSession(user.id);
           if (!session)
             throw new APIError("SERVICE_UNAVAILABLE", { message: "Please try again." });

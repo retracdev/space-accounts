@@ -1,0 +1,4 @@
+# Email domains that cannot use "Continue with Google".
+# Separate domains with commas. Subdomains are blocked too
+# (blocking example.com also blocks mail.example.com).
+domains: example.com

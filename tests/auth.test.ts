@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { build } from "esbuild";
+import { rawText } from "../esbuild-raw";
 import { readFileSync, readdirSync } from "node:fs";
 
 const origin = "https://accounts.retrac.space";
@@ -35,6 +36,7 @@ beforeAll(async () => {
     target: "es2022",
     conditions: ["workerd", "worker", "browser"],
     external: ["node:*", "cloudflare:*"],
+    plugins: [rawText],
   });
   mf = new Miniflare({
     modules: true,

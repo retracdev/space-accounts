@@ -15,6 +15,7 @@
     "tests",
     "drizzle.config.ts",
     "vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "esbuild-raw.ts"
   ]
 }

@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import { build } from "esbuild";
 import { resolve } from "node:path";
+import { rawText } from "./esbuild-raw";
 
 export default defineConfig({
   build: { target: "es2022", emptyOutDir: true },
@@ -20,6 +21,7 @@ export default defineConfig({
           target: "es2022",
           conditions: ["workerd", "worker", "browser"],
           external: ["node:*", "cloudflare:*"],
+          plugins: [rawText],
         });
       },
     },

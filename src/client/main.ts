@@ -16,8 +16,9 @@ let currentUser: User | undefined;
 let googleEnabled = false;
 const requiredUsernamePath = "/change-username-required-1";
 const unlinkGooglePath = "/unlink-google-required-setpw";
+const setPasswordPath = "/set-password-required";
 const duplicateGooglePath = "/duplicate-google-error";
-const requiredPaths = [requiredUsernamePath, unlinkGooglePath, duplicateGooglePath];
+const requiredPaths = [requiredUsernamePath, unlinkGooglePath, setPasswordPath, duplicateGooglePath];
 type AccountAction = {
   actionRequired?: boolean;
   actionRequiredReason?: string | null;
@@ -285,6 +286,7 @@ async function render() {
   if (currentUser) {
     if (path === requiredUsernamePath) renderRequiredUsername(currentUser);
     else if (path === unlinkGooglePath) renderUnlinkGoogle(currentUser);
+    else if (path === setPasswordPath) renderUnlinkGoogle(currentUser, false);
     else if (path === duplicateGooglePath) renderDuplicateGoogle(currentUser);
     else if (!currentUser.username) renderUsername();
     else renderSettings(currentUser);
@@ -364,19 +366,20 @@ function renderRequiredUsername(user: User) {
     root.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
   });
 }
-function renderUnlinkGoogle(user: User) {
+function renderUnlinkGoogle(user: User, unlink = true) {
+  const reason = unlink ? "auth_unlink_google" : "auth_set_password";
   document.title = "Set a password · retrac.space";
-  if ((user as User & AccountAction).actionRequiredReason !== "auth_unlink_google") {
+  if ((user as User & AccountAction).actionRequiredReason !== reason) {
     root.innerHTML = `<section class="single panel"><h1>No action required</h1><p class="subtle">Your account does not need a new password.</p><a class="button wide" href="/settings" data-nav>Account settings</a></section>`;
     return;
   }
-  root.innerHTML = `<section class="single panel"><h1>Sign in with Google is no longer available</h1><p class="subtle">Sign in with Google is no longer available for your account, so you'll need to set a password. Once you set a password, your Google account will be unlinked.</p><form id="unlink-google-form"><input type="hidden" name="username" value="${escape(user.username ?? user.email)}" autocomplete="username">${field("newPassword", "New password", "password", "", "new-password", "At least 7 characters. Password recovery is not available.")}${field("confirmPassword", "Confirm password", "password", "", "new-password")}<button type="submit" class="wide">Set password</button></form>${notice}<button class="text-button" id="signout">Sign out</button></section>`;
+  root.innerHTML = `<section class="single panel"><h1>${unlink ? "Sign in with Google is no longer available" : "You need to set a new password"}</h1><p class="subtle">${unlink ? "Sign in with Google is no longer available for your account, so you'll need to set a password. Once you set a password, your Google account will be unlinked." : "Your account requires a new password. Set one below to continue using your account."}</p><form id="unlink-google-form"><input type="hidden" name="username" value="${escape(user.username ?? user.email)}" autocomplete="username">${field("newPassword", "New password", "password", "", "new-password", "At least 7 characters. Password recovery is not available.")}${field("confirmPassword", "Confirm password", "password", "", "new-password")}<button type="submit" class="wide">Set password</button></form>${notice}<button class="text-button" id="signout">Sign out</button></section>`;
   bindSignout();
   bindForm("unlink-google-form", async (data) => {
     const password = String(data.get("newPassword"));
     if (password !== String(data.get("confirmPassword")))
       throw new Error("Passwords do not match.");
-    const response = await fetch("/api/auth/unlink-google/set-password", {
+    const response = await fetch(unlink ? "/api/auth/unlink-google/set-password" : "/api/auth/required-password/set-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ newPassword: password }),
@@ -395,7 +398,7 @@ function renderUnlinkGoogle(user: User) {
     const username = result.username ?? user.username ?? "";
     const email = result.email ?? user.email;
     document.title = "Password set · retrac.space";
-    root.innerHTML = `<section class="single panel username-success" role="status"><svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m7.5 12 3 3 6-6"/></svg><h1 tabindex="-1">Your password is set</h1><p class="subtle">Your Google account has been unlinked. You can now go back to wherever you were and sign in with these details from now on.</p><dl class="login-details"><div><dt>Username</dt><dd>${escape(username)}</dd></div><div><dt>Email</dt><dd>${escape(email)}</dd></div><div><dt>Password</dt><dd class="reveal"><span id="password-value">${"•".repeat(Math.min(password.length, 16))}</span><button type="button" class="text-button" id="reveal-password" aria-pressed="false">Show</button></dd></div></dl></section>`;
+    root.innerHTML = `<section class="single panel username-success" role="status"><svg class="success-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m7.5 12 3 3 6-6"/></svg><h1 tabindex="-1">Your password is set</h1><p class="subtle">${unlink ? "Your Google account has been unlinked. " : ""}You can now go back to wherever you were and sign in with these details from now on.</p><dl class="login-details"><div><dt>Username</dt><dd>${escape(username)}</dd></div><div><dt>Email</dt><dd>${escape(email)}</dd></div><div><dt>Password</dt><dd class="reveal"><span id="password-value">${"•".repeat(Math.min(password.length, 16))}</span><button type="button" class="text-button" id="reveal-password" aria-pressed="false">Show</button></dd></div></dl></section>`;
     const value = root.querySelector<HTMLElement>("#password-value")!;
     const toggle = root.querySelector<HTMLButtonElement>("#reveal-password")!;
     toggle.addEventListener("click", () => {
@@ -457,6 +460,7 @@ function renderSettings(user: User) {
   const actionPaths: Record<string, string> = {
     inappropriate_username: requiredUsernamePath,
     auth_unlink_google: unlinkGooglePath,
+    auth_set_password: setPasswordPath,
     duplicate_google_error: duplicateGooglePath,
   };
   if (reason && Object.hasOwn(actionPaths, reason)) {

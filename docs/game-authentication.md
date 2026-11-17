@@ -99,6 +99,27 @@ If that identifier belongs to a flagged account, the user is signed in **without
 password** so a locked-out owner can set one. This applies only while the flag is set;
 it is cleared as soon as a password is saved. Flag only accounts that need it.
 
+### Requiring a new password (`auth_set_password`)
+
+To require a new password without unlinking Google, set these operator-only fields:
+
+```sql
+UPDATE user SET action_required = 1, action_required_reason = 'auth_set_password',
+  action_required_url = 'https://accounts.retrac.space/set-password-required',
+  updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER)
+WHERE username = 'retrac';
+```
+
+Replace `retrac` with the account's normalized username. No migration is needed.
+The existing username/email step signs this account in without its old password
+and sends it to `/set-password-required`. The user enters and confirms a new
+7–128 character password. POST `/api/auth/required-password/set-password` replaces
+an existing password or creates one, then clears all three action fields. Google
+links are preserved. Subsequent sign-ins require the new password or a linked provider.
+
+As with `auth_unlink_google`, anyone who knows the flagged username or email can
+complete this flow while the flag is set; enable it only for the intended account.
+
 ### Duplicate account notice (`duplicate_google_error`)
 
 Flag an account that looks like a duplicate made while its owner could not reach

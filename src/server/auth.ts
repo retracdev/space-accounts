@@ -203,6 +203,7 @@ export function createAuth(env: Env) {
         "/delete-user": { window: 60, max: 5 },
         "/unlink-google/identify": { window: 60, max: 10 },
         "/unlink-google/set-password": { window: 60, max: 5 },
+        "/required-password/set-password": { window: 60, max: 5 },
         "/duplicate-google-error/dismiss": { window: 60, max: 5 },
       },
     },

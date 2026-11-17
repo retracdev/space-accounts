@@ -64,6 +64,60 @@ afterAll(async () => {
   await mf?.dispose();
 });
 
+describe("Operator-required password actions", () => {
+  it.each([
+    { suffix: "replace", reason: "auth_set_password", existing: true },
+    { suffix: "create", reason: "auth_set_password", existing: false },
+    { suffix: "unlink", reason: "auth_unlink_google", existing: false },
+  ])("sets a password for $suffix and clears only its action", async ({ suffix, reason, existing }) => {
+    const db = await mf.getD1Database("DB");
+    const username = `pw_${suffix}`;
+    const email = `${username}@example.test`;
+    const signup = await request("/sign-up/email", { username, email, name: username, password });
+    expect(signup.status).toBe(200);
+    const { user } = await signup.json() as { user: { id: string } };
+    const endpoint = reason === "auth_set_password"
+      ? "/required-password/set-password" : "/unlink-google/set-password";
+    const activeCookie = signup.headers.get("set-cookie")!.split(";")[0];
+    expect((await request(endpoint, { newPassword: password }, { cookie: activeCookie })).status).toBe(400);
+    await db.prepare('INSERT INTO account (id, account_id, provider_id, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(`google_${suffix}`, user.id, "google", user.id, Date.now(), Date.now()).run();
+    if (!existing)
+      await db.prepare('DELETE FROM account WHERE user_id = ? AND provider_id = ?').bind(user.id, "credential").run();
+    await db.prepare('UPDATE user SET action_required = 1, action_required_reason = ?, action_required_url = ? WHERE id = ?')
+      .bind(reason, origin + "/set-password-required", user.id).run();
+
+    const identified = await request("/unlink-google/identify", {
+      identifier: `  ${(existing ? username : email).toUpperCase()}  `,
+    });
+    expect(identified.status).toBe(200);
+    expect(await identified.json()).toEqual({ signedIn: true, redirect:
+      reason === "auth_set_password" ? "/set-password-required" : "/unlink-google-required-setpw" });
+    const resetCookie = identified.headers.get("set-cookie")!.split(";")[0];
+    expect((await request(endpoint, { newPassword: password })).status).toBe(401);
+    expect((await request(endpoint, { newPassword: password }, { cookie: resetCookie, origin: "https://evil.test" })).status).toBe(403);
+    const wrongEndpoint = reason === "auth_set_password" ? "/unlink-google/set-password" : "/required-password/set-password";
+    expect((await request(wrongEndpoint, { newPassword: password }, { cookie: resetCookie })).status).toBe(400);
+    for (const newPassword of ["short", "x".repeat(129)])
+      expect((await request(endpoint, { newPassword }, { cookie: resetCookie })).status).toBe(400);
+    expect((await db.prepare('SELECT action_required FROM user WHERE id = ?').bind(user.id).first())?.action_required).toBe(1);
+
+    const newPassword = password + " replacement";
+    expect((await request(endpoint, { newPassword }, { cookie: resetCookie })).status).toBe(200);
+    expect(await db.prepare('SELECT action_required, action_required_reason, action_required_url FROM user WHERE id = ?').bind(user.id).first())
+      .toEqual({ action_required: 0, action_required_reason: null, action_required_url: null });
+    const google = await db.prepare('SELECT id FROM account WHERE user_id = ? AND provider_id = ?').bind(user.id, "google").first();
+    expect(!!google).toBe(reason === "auth_set_password");
+    const normal = await request("/unlink-google/identify", { identifier: username });
+    expect(await normal.json()).toMatchObject({ signedIn: false });
+    expect(normal.headers.get("set-cookie")).toBeNull();
+    expect((await request(endpoint, { newPassword }, { cookie: resetCookie })).status).toBe(400);
+    expect((await request("/sign-in/username", { username, password })).status).not.toBe(200);
+    expect((await request("/sign-in/username", { username, password: newPassword })).status).toBe(200);
+    await db.prepare('DELETE FROM user WHERE id = ?').bind(user.id).run();
+  });
+});
+
 describe("Worker authentication with real D1", () => {
   it("returns a normal guest state without redirecting anonymous requests", async () => {
     const response = await request("/get-session");

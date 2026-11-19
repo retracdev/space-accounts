@@ -10,15 +10,33 @@ const audience = "https://api.retrac.space";
 const identity = { id: user.id, username: user.username };
 const fail = (status: number) => Response.json({ message: "Game authentication request failed." }, { status });
 
-// No game is trusted by default. Configure only reviewed, exact HTTPS origins.
+const reportedOrigins = new Set<string>();
+
+// No game is trusted by default. Configure only reviewed, exact HTTPS origins,
+// separated by commas and/or whitespace. An invalid entry is never trusted, but it
+// must not stop every other game from authenticating (which used to return 503).
 export function gameOrigins(env: Env): string[] {
-  return (env.GAME_AUTH_ORIGINS ?? "").split(",").filter(Boolean).map((value) => {
-    const origin = value.trim();
-    const url = new URL(origin);
-    if (url.origin !== origin || url.protocol !== "https:" || url.hostname === "retrac.space" ||
-        !url.hostname.endsWith(".retrac.space")) throw new Error("Invalid game origin");
-    return origin;
-  });
+  const origins: string[] = [];
+  for (const value of (env.GAME_AUTH_ORIGINS ?? "").split(/[\s,]+/)) {
+    if (!value) continue;
+    const origin = gameOrigin(value);
+    if (origin) origins.push(origin);
+    else if (!reportedOrigins.has(value)) {
+      reportedOrigins.add(value);
+      console.warn("Ignoring invalid GAME_AUTH_ORIGINS entry:", JSON.stringify(value));
+    }
+  }
+  return origins;
+}
+
+function gameOrigin(value: string): string | null {
+  let url: URL;
+  try { url = new URL(value); } catch { return null; }
+  // Only a bare origin; a single trailing slash still names the same origin.
+  if (value !== url.origin && value !== url.origin + "/") return null;
+  if (url.protocol !== "https:" || url.hostname === "retrac.space" ||
+      !url.hostname.endsWith(".retrac.space")) return null;
+  return url.origin;
 }
 
 async function body(request: Request): Promise<Record<string, unknown> | null> {

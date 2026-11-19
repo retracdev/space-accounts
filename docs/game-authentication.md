@@ -29,7 +29,13 @@ Account environment variables/bindings:
 
 - `BETTER_AUTH_URL=https://accounts.retrac.space` (local account UI: `http://localhost:8788`).
 - `GAME_AUTH_ORIGINS`: optional comma-separated, reviewed exact HTTPS game origins
-  under `retrac.space`, without paths, wildcards or trailing slashes. Empty by default.
+  under `retrac.space`, without paths or wildcards. Empty by default. Whitespace/newlines
+  between entries and a single trailing slash are tolerated. Any other invalid entry is
+  never trusted: it is ignored with a `console.warn` (see `wrangler pages deployment tail`)
+  so it cannot break token access for the other games. This list is separate from the
+  `websiteOrigins` list in `worker.ts`, which only covers `get-session` username reads;
+  a site that calls `/api/auth/token` must be listed here. Env changes apply only to new
+  deployments.
   Candidate origins in space-api main are `https://chess.retrac.space`,
   `https://pong.retrac.space`, `https://2048.retrac.space`. Enable only after verifying
   ownership and security. This grants only credentialed GET `/api/auth/token` CORS,

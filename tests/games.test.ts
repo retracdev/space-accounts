@@ -36,7 +36,8 @@ beforeAll(async () => {
     compatibilityDate: "2026-07-01", compatibilityFlags: ["nodejs_compat"], d1Databases: ["DB"],
     bindings: { BETTER_AUTH_URL: origin, BETTER_AUTH_SECRET: secret, ACCOUNTS_API_KEY: serviceKey,
       GAME_JWT_PRIVATE_KEY: JSON.stringify(await exportJWK(privateKey)),
-      GAME_AUTH_ORIGINS: "https://chess.retrac.space" },
+      // Deliberately untidy, with one invalid entry: it must not take down every game.
+      GAME_AUTH_ORIGINS: "https://chess.retrac.space,\nhttps://toptext.retrac.space/, http://bad.retrac.space, " },
     serviceBindings: { ASSETS: () => new Response("assets") } });
   const db = await mf.getD1Database("DB");
   for (const file of readdirSync("migrations").filter((f) => f.endsWith(".sql")))
@@ -69,6 +70,28 @@ it("issues minimal five-minute tokens only for real sessions, with narrowly scop
     user: { username: "game_player" },
     actionRequired: { required: false, reason: null, url: null },
   });
+});
+
+it("keeps game token CORS working when GAME_AUTH_ORIGINS has an invalid entry (no 503)", async () => {
+  const preflight = (caller: string) => mf.dispatchFetch(origin + "/api/auth/token", {
+    method: "OPTIONS",
+    headers: { Origin: caller, "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "content-type" },
+  });
+  for (const game of ["https://chess.retrac.space", "https://toptext.retrac.space"]) {
+    const allowed = await preflight(game);
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe(game);
+    expect(allowed.headers.get("access-control-allow-credentials")).toBe("true");
+    const issued = await auth("token", undefined, game);
+    expect(issued.status).toBe(200);
+    expect(issued.headers.get("access-control-allow-origin")).toBe(game);
+  }
+  for (const caller of ["http://bad.retrac.space", "https://soundboard.retrac.space", "https://evil.test"]) {
+    for (const response of [await preflight(caller), await auth("token", undefined, caller)]) {
+      expect(response.status).toBe(403);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    }
+  }
 });
 
 it("requires service authorization, rejects browser origins, and bounds directory queries", async () => {

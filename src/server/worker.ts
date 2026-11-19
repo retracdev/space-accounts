@@ -8,6 +8,7 @@ const websiteOrigins = [
   "https://basketsmash.retrac.space",
   "https://soundboard.retrac.space",
   "https://glowstudio.retrac.space",
+  "https://toptext.retrac.space",
 ];
 
 const headers = {

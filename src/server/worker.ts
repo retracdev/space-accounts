@@ -10,6 +10,7 @@ const websiteOrigins = [
   "https://glowstudio.retrac.space",
   "https://toptext.retrac.space",
   "https://tugofwar.retrac.space",
+  "https://reaction.retrac.space",
 ];
 
 const headers = {

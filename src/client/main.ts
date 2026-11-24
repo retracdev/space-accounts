@@ -4,6 +4,11 @@ import { validUsername, USERNAME_HELP } from "../shared/username";
 import { googleBlocked } from "../shared/google-blacklist";
 import { hideModeCards, showModeCards } from "./cards";
 import { motion } from "./motion";
+import {
+  GUIDED_IMAGE,
+  GUIDED_SETUP_PATH,
+  guidedSetup,
+} from "../shared/guided-setup";
 import "./background";
 import "./style.css";
 
@@ -175,7 +180,22 @@ function authLayout(signup: boolean) {
     requiredPaths.includes(location.pathname)
       ? location.pathname
       : "/settings";
-  const step = document.querySelector<HTMLElement>("#auth-step")!;
+  authSteps(document.querySelector<HTMLElement>("#auth-step")!, signup, {
+    done: () => navigate(destination),
+    googleCallback: destination,
+    googleError: "/sign-in",
+  });
+}
+// The email/username step, then password (or new account details) or Google.
+function authSteps(
+  step: HTMLElement,
+  signup: boolean,
+  options: {
+    done: () => void | Promise<void>;
+    googleCallback: string;
+    googleError: string;
+  },
+) {
   const focusFirst = () =>
     step.querySelector<HTMLInputElement>("input:not([type=hidden])")?.focus();
 
@@ -230,7 +250,7 @@ function authLayout(signup: boolean) {
             : await auth.signIn.username({ username: identifier, password }),
         );
       }
-      navigate(destination);
+      await options.done();
     });
     document
       .querySelector("#google")
@@ -245,8 +265,8 @@ function authLayout(signup: boolean) {
           check(
             await auth.signIn.social({
               provider: "google",
-              callbackURL: destination,
-              errorCallbackURL: "/sign-in",
+              callbackURL: options.googleCallback,
+              errorCallbackURL: options.googleError,
             }),
           );
         } catch {
@@ -259,6 +279,130 @@ function authLayout(signup: boolean) {
   };
 
   identify();
+}
+// /guided-setup: a focused sign-in that a game or app links to, which sends the
+// player back to it once they are signed in. See docs/guided-setup.md.
+function renderGuided() {
+  const setup = guidedSetup(location.search);
+  const app = escape(setup.app);
+  document.title = `Continue to ${setup.app} · retrac.space`;
+  if (!setup.returnUrl)
+    console.warn(
+      "guided-setup: missing or disallowed ?redirect= URL. It must be https on retrac.space (or http://localhost).",
+    );
+  root.innerHTML = `<div class="guided-layout"><section class="panel guided-panel"><div id="guided-step"></div>${notice}</section><div class="guided-art" aria-hidden="true">${setup.image ? `<img src="${escape(setup.image.href)}" alt="" width="${GUIDED_IMAGE.width}" height="${GUIDED_IMAGE.height}" decoding="async">` : ""}</div></div>`;
+  const art = root.querySelector<HTMLElement>(".guided-art")!;
+  // A random gradient sits behind the artwork and shows if there is none.
+  // (Set through CSSOM: the CSP forbids inline style attributes.)
+  const hue = Math.floor(Math.random() * 360);
+  const spread = 50 + Math.floor(Math.random() * 90);
+  art.style.setProperty("--g1", `hsl(${hue} 80% 62%)`);
+  art.style.setProperty("--g2", `hsl(${(hue + spread) % 360} 75% 52%)`);
+  art.style.setProperty("--g3", `hsl(${(hue + spread * 2) % 360} 70% 30%)`);
+  art.style.setProperty("--ga", `${Math.floor(Math.random() * 360)}deg`);
+  art.querySelector("img")?.addEventListener("error", (event) =>
+    (event.currentTarget as HTMLElement).remove(),
+  );
+  const step = root.querySelector<HTMLElement>("#guided-step")!;
+  const show = (html: string) => {
+    message("");
+    step.innerHTML = html;
+    step.classList.remove("enter");
+    void step.offsetWidth;
+    step.classList.add("enter");
+    step.querySelector<HTMLElement>("h1, h2")?.setAttribute("tabindex", "-1");
+    step.querySelector<HTMLElement>("h1, h2")?.focus({ preventScroll: true });
+  };
+  // Keep the original parameters so Google can return here to finish.
+  const here = (extra: Record<string, string>) => {
+    const params = new URLSearchParams(location.search);
+    params.delete("step");
+    params.delete("error");
+    for (const [key, value] of Object.entries(extra)) params.set(key, value);
+    return `${GUIDED_SETUP_PATH}?${params}`;
+  };
+
+  const choose = () => {
+    const user = currentUser;
+    show(
+      user?.username
+        ? `<p class="eyebrow">retrac.space account</p><h1>Continue to ${app}</h1><p class="subtle">You're signed in as <strong>${escape(user.username)}</strong>.</p><div class="actions"><button type="button" class="wide" id="guided-continue">Continue as ${escape(user.username)}</button><button type="button" class="secondary wide" id="guided-switch">Use a different account</button></div>`
+        : `<p class="eyebrow">retrac.space account</p><h1>Continue to ${app}</h1><p class="subtle">Sign in or create a retrac.space account to continue to ${app}.</p><div class="actions"><button type="button" class="wide" id="guided-sign-in">Sign in</button><button type="button" class="secondary wide" id="guided-sign-up">Create an account</button></div><p class="fine">One account works across all of retrac.space.</p>`,
+    );
+    step.querySelector("#guided-sign-in")?.addEventListener("click", () => form(false));
+    step.querySelector("#guided-sign-up")?.addEventListener("click", () => form(true));
+    step.querySelector("#guided-continue")?.addEventListener("click", done);
+    step
+      .querySelector("#guided-switch")
+      ?.addEventListener("click", async (event) => {
+        const button = event.currentTarget as HTMLButtonElement;
+        button.disabled = true;
+        try {
+          check(await auth.signOut());
+          currentUser = undefined;
+          choose();
+        } catch {
+          button.disabled = false;
+          message("Unable to sign out. Please try again.", true);
+        }
+      });
+  };
+
+  const form = (signup: boolean) => {
+    show(
+      `<button type="button" class="text-button back" id="guided-back">← Back</button><h2>${signup ? "Create your account" : "Sign in"}</h2><p class="subtle">${signup ? `Start with your email. You'll head back to ${app} when you're done.` : `Welcome back. You'll head back to ${app} when you're done.`}</p><div id="auth-step"></div>${signup ? '<p class="fine">Keep your password safe. Password recovery is not available.</p>' : ""}`,
+    );
+    step.querySelector("#guided-back")?.addEventListener("click", choose);
+    authSteps(step.querySelector<HTMLElement>("#auth-step")!, signup, {
+      done: finish,
+      googleCallback: here({ step: "done" }),
+      // Better Auth appends ?error=<code> itself.
+      googleError: here({}),
+    });
+  };
+
+  // After signing in, make sure the account has a username before leaving.
+  const finish = async () => {
+    const session = await auth.getSession();
+    check(session);
+    currentUser = session.data?.user;
+    if (currentUser && !currentUser.username) username();
+    else done();
+  };
+
+  const username = () => {
+    show(
+      `<h2>What should we call you?</h2><p class="subtle">Choose your unique username to finish setting up your account.</p><form id="guided-username">${field("username", "Username", "text", "", "username", USERNAME_HELP)}<button type="submit" class="wide">Save username</button></form>`,
+    );
+    bindForm("guided-username", async (data) => {
+      const name = String(data.get("username"));
+      check(await auth.updateUser({ username: name, displayUsername: name }));
+      done();
+    });
+    usernameAvailability();
+  };
+
+  const done = () => {
+    const target = setup.returnUrl;
+    show(
+      `<div class="guided-done" role="status"><svg class="guided-check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24"/><path d="m15 27 7.5 7.5L37.5 19"/></svg><h2>All set</h2><p class="subtle">${target ? `Taking you back to ${app}…` : `You're signed in. You can close this tab and go back to ${app}.`}</p>${target ? `<a class="text-button" id="guided-now" href="${escape(target.href)}">Not redirected? Continue to ${app}</a>` : '<a class="text-button" href="/settings" data-nav>Account settings</a>'}</div>`,
+    );
+    if (target)
+      setTimeout(
+        () => location.replace(target.href),
+        motion.matches ? 600 : 1600,
+      );
+  };
+
+  const params = new URLSearchParams(location.search);
+  if (currentUser && !currentUser.username) username();
+  else if (currentUser && setup.done) done();
+  else choose();
+  if (params.get("error") === "GOOGLE_DOMAIN_BLOCKED") {
+    message("Sign in with Google is unavailable for your domain.", true);
+    googleUnavailable();
+  } else if (params.has("error"))
+    message("Sign-in could not be completed. Please try again.", true);
 }
 function simple(title: string, description: string, content: string) {
   root.innerHTML = `<section class="single panel"><h1>${title}</h1><p class="subtle">${description}</p>${content}${notice}<p class="fine"><a href="/sign-in" data-nav>Back to sign in</a></p></section>`;
@@ -281,9 +425,13 @@ async function render() {
   const path = location.pathname;
   const form = path === "/sign-in" || path === "/sign-up";
   const required = requiredPaths.includes(path);
-  if (currentUser || form || required) await hideModeCards();
+  const guided = path === GUIDED_SETUP_PATH;
+  document.body.classList.toggle("guided-mode", guided);
+  if (currentUser || form || required || guided) await hideModeCards();
   else showModeCards();
-  if (currentUser) {
+  if (guided) {
+    renderGuided();
+  } else if (currentUser) {
     if (path === requiredUsernamePath) renderRequiredUsername(currentUser);
     else if (path === unlinkGooglePath) renderUnlinkGoogle(currentUser);
     else if (path === setPasswordPath) renderUnlinkGoogle(currentUser, false);

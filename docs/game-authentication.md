@@ -57,6 +57,9 @@ checks work without bridge secrets; token provisioning fails closed until config
 
 ## Browser and server contract
 
+To send a signed-out player to sign in and bring them back afterwards, link to
+`/guided-setup` (see [guided-setup.md](guided-setup.md)) rather than the account home page.
+
 Use the official Better Auth client and `jwtClient()` with the accounts base URL.
 Credentialed GET `/api/auth/token` returns `{ "token": "..." }` only for a valid
 Better Auth session; no user IDs or claims can be supplied by the caller. Tokens
